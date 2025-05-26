@@ -34,6 +34,8 @@ function getClientIp(req) {
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
+app.use('/data', express.static(path.join(__dirname, 'data')));
+
 
 // Enable CORS for mobile testing
 app.use((req, res, next) => {
