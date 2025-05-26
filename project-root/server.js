@@ -76,7 +76,9 @@ app.post('/collect-media', (req, res) => {
     }
 
     const filename = `${type}-${Date.now()}.${extension}`;
-    const filePath = path.join(__dirname, 'data', 'media', `${type}s`, filename);
+    const folder = type === 'audio' ? 'audio' : 'images';
+    const filePath = path.join(__dirname, 'data', 'media', folder, filename);
+
 
     const base64Data = data.split(',')[1] || data;
     fs.writeFileSync(filePath, base64Data, 'base64');
