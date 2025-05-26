@@ -1,10 +1,8 @@
-{
-  "name": "connection-test-tool",
-  "version": "1.0.0",
-  "dependencies": {
-    "express": "^4.21.2",
-    "geoip-lite": "^1.4.10"
-    "cloudinary": "^1.41.3"
-
-  }
+"dependencies": {
+  "express": "^4.21.2",
+  "geoip-lite": "^1.4.10",
+  "cloudinary": "^1.41.3"
+},
+"scripts": {
+  "start": "node server.js"
 }
