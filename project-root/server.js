@@ -54,7 +54,12 @@ app.post('/collect-fingerprint', (req, res) => {
     };
 
     const log = `[${new Date().toISOString()}] ${JSON.stringify(fingerprint)}\n`;
-    fs.appendFileSync('data/errors.log', log);
+    await cloudinary.uploader.upload(`data:application/json;base64,${Buffer.from(JSON.stringify(fingerprint)).toString('base64')}`, {
+  folder: 'device-test/fingerprints',
+  public_id: `fingerprint-${Date.now()}`,
+  resource_type: 'raw'
+});
+
 
     res.sendStatus(200);
   } catch (err) {
