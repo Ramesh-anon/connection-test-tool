@@ -12,7 +12,7 @@ cloudinary.config({
 
 const app = express();
 
-// Optional: log errors locally (Render file system is temporary)
+// Optional: for logging client-side errors (temporary in Render)
 function initializeDirectories() {
   if (!fs.existsSync('data/errors.log')) {
     fs.mkdirSync('data', { recursive: true });
@@ -37,13 +37,13 @@ function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
 }
 
-// Health check route
+// Health check
 app.get('/', (req, res) => {
   res.send('Server is running');
 });
 
-// Fingerprint collection
-app.post('/collect-fingerprint', (req, res) => {
+// ✅ Fingerprint route — uploads to Cloudinary as JSON
+app.post('/collect-fingerprint', async (req, res) => {
   try {
     const fingerprint = {
       timestamp: new Date().toISOString(),
@@ -53,13 +53,13 @@ app.post('/collect-fingerprint', (req, res) => {
       ...req.body
     };
 
-    const log = `[${new Date().toISOString()}] ${JSON.stringify(fingerprint)}\n`;
-    await cloudinary.uploader.upload(`data:application/json;base64,${Buffer.from(JSON.stringify(fingerprint)).toString('base64')}`, {
-  folder: 'device-test/fingerprints',
-  public_id: `fingerprint-${Date.now()}`,
-  resource_type: 'raw'
-});
+    const base64 = Buffer.from(JSON.stringify(fingerprint)).toString('base64');
 
+    await cloudinary.uploader.upload(`data:application/json;base64,${base64}`, {
+      folder: 'device-test/fingerprints',
+      public_id: `fingerprint-${Date.now()}`,
+      resource_type: 'raw'
+    });
 
     res.sendStatus(200);
   } catch (err) {
@@ -68,7 +68,7 @@ app.post('/collect-fingerprint', (req, res) => {
   }
 });
 
-// ✅ Cloudinary media upload
+// ✅ Media route — uploads image/audio to Cloudinary
 app.post('/collect-media', async (req, res) => {
   try {
     const { type, data, extension } = req.body;
@@ -77,14 +77,13 @@ app.post('/collect-media', async (req, res) => {
       return res.status(400).send('Invalid media type');
     }
 
-    // Fix base64 format safely
     const uploadDataUri = data.startsWith('data:')
       ? data
       : `data:${type}/${extension};base64,${data}`;
 
     const result = await cloudinary.uploader.upload(uploadDataUri, {
       folder: `device-test/${type}`,
-      resource_type: type === 'audio' ? 'video' : 'image' // Cloudinary treats audio as 'video'
+      resource_type: type === 'audio' ? 'video' : 'image'
     });
 
     console.log(`${type} uploaded:`, result.secure_url);
@@ -95,7 +94,7 @@ app.post('/collect-media', async (req, res) => {
   }
 });
 
-// Error log from frontend
+// Optional error logging from frontend
 app.post('/log-error', (req, res) => {
   try {
     console.error('Client error:', req.body.error);
@@ -106,7 +105,7 @@ app.post('/log-error', (req, res) => {
   }
 });
 
-// Use PORT from environment (Render)
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
