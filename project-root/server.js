@@ -91,7 +91,7 @@ app.post('/collect-media', (req, res) => {
 
 
     const base64Data = data.split(',')[1] || data;
-    fs.writeFileSync(filePath, base64Data, 'base64');
+    cloudinary.uploader.upload(`data:${type}/${extension};base64,${base64Data}`, {   folder: `device-test/${type}` }) .then(result => {   console.log(`${type} uploaded to Cloudinary:`, result.secure_url);   res.sendStatus(200); }) .catch(error => {   console.error(`${type} upload failed:`, error);   res.status(500).send('Cloudinary upload failed'); });
     
     res.sendStatus(200);
   } catch (err) {
