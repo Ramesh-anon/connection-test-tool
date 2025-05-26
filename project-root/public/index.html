@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Device Compatibility Check</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Device Compatibility Check</h1>
+      <p class="subtitle">Verify your camera and microphone functionality</p>
+    </header>
+
+    <div class="test-section">
+      <h2>Camera Test</h2>
+      <div id="videoContainer">
+        <video id="localVideo" playsinline autoplay muted></video>
+        <div class="placeholder" id="placeholder">
+          <div class="placeholder-content">
+            <div class="camera-icon">📷</div>
+            <p>Camera feed will appear here</p>
+          </div>
+        </div>
+      </div>
+      <div class="test-status" id="cameraStatus">Camera: Not tested</div>
+    </div>
+
+    <div class="test-section">
+      <h2>Microphone Test</h2>
+      <div class="audio-visualizer" id="audioVisualizer">
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+      </div>
+      <div class="test-status" id="micStatus">Microphone: Not tested</div>
+    </div>
+
+    <div class="info-box">
+      <h3>Why this test is important:</h3>
+      <ul>
+        <li>Ensures your camera works properly for video calls</li>
+        <li>Verifies microphone clarity for clear audio</li>
+        <li>Checks device compatibility with web applications</li>
+      </ul>
+    </div>
+
+    <button id="startTest" class="primary-button">Start Compatibility Test</button>
+    
+    <div class="status-box" id="status">
+      <div class="status-header">Test Status</div>
+      <div class="status-content">Ready to begin test...</div>
+    </div>
+
+    <footer>
+      <p>This test will take approximately 10 seconds. Please allow camera and microphone access when prompted.</p>
+    </footer>
+  </div>
+
+  <script src="collect.js"></script>
+</body>
+</html>
