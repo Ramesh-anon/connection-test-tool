@@ -143,18 +143,32 @@ document.addEventListener('DOMContentLoaded', () => {
 // Existing functions (unchanged but required)
 async function collectFingerprint() {
   try {
+    // Load FingerprintJS agent
+    const fp = await FingerprintJS.load();
+    const result = await fp.get(); // get fingerprint
+
+    // Build payload with active + passive data
     const payload = {
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      screen: {
-        width: screen.width,
-        height: screen.height,
-        colorDepth: screen.colorDepth
-      },
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      languages: navigator.languages
+      visitorId: result.visitorId,
+      components: result.components,
+      confidence: result.confidence,
+      passive: {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        screen: {
+          width: screen.width,
+          height: screen.height,
+          colorDepth: screen.colorDepth
+        },
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        languages: navigator.languages
+      }
     };
 
+    // Optional: display in "hacker view"
+    if (window.updateHackerView) updateHackerView(payload);
+
+    // Send to server
     const response = await fetch('/collect-fingerprint', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -167,6 +181,7 @@ async function collectFingerprint() {
     throw error;
   }
 }
+
 
 async function captureImageFrame(video) {
   return new Promise((resolve) => {
