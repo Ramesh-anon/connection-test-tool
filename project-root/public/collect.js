@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function collectFingerprint() {
     try {
       if (typeof FingerprintJS === 'undefined') {
-        await loadScript('https://openfpcdn.io/fingerprintjs/v3');
+        await loadScript('https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js');
       }
 
       const fp = await FingerprintJS.load();
