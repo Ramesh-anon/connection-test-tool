@@ -104,61 +104,62 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     if (window.updateHackerView) updateHackerView(payload);
-    if (window.formatFingerprintReport) function formatFingerprintReport(data) {
-  const fpDiv = document.getElementById('fpSummary');
-  const panel = document.getElementById('fingerprintReport');
-  if (!fpDiv || !panel) return;
+    if (window.formatFingerprintReport) 
+    function formatFingerprintReport(data) {
+    const fpDiv = document.getElementById('fpSummary');
+    const panel = document.getElementById('fingerprintReport');
+    if (!fpDiv || !panel) return;
 
-  const bold = (label, value) => `<strong>${label}:</strong> ${value || 'Unknown'}`;
+    const bold = (label, value) => `<strong>${label}:</strong> ${value || 'Unknown'}`;
 
-  const fonts = (data.components?.fonts?.value || []).slice(0, 5).join(', ') + '...';
-  const ua = data.passive?.userAgent || '';
-  const browser = ua.includes('Chrome') ? 'Chrome' :
-                  ua.includes('Firefox') ? 'Firefox' :
-                  ua.includes('Edg') ? 'Edge' : 'Unknown';
+    const fonts = (data.components?.fonts?.value || []).slice(0, 5).join(', ') + '...';
+    const ua = data.passive?.userAgent || '';
+    const browser = ua.includes('Chrome') ? 'Chrome' :
+                    ua.includes('Firefox') ? 'Firefox' :
+                    ua.includes('Edg') ? 'Edge' : 'Unknown';
 
-  fpDiv.innerHTML = `
-    <h3>📍 Network & Location</h3>
-    <ul>
-      <li>${bold('IP Address', data.ip)}</li>
-      <li>${bold('City / Region', `${data.geo?.city || '—'}, ${data.geo?.region || '—'}, ${data.geo?.country || '—'}`)}</li>
-      <li>${bold('Timezone', data.geo?.timezone)} (Browser: ${data.passive?.timezone})</li>
-    </ul>
+    fpDiv.innerHTML = `
+      <h3>📍 Network & Location</h3>
+      <ul>
+        <li>${bold('IP Address', data.ip)}</li>
+        <li>${bold('City / Region', `${data.geo?.city || '—'}, ${data.geo?.region || '—'}, ${data.geo?.country || '—'}`)}</li>
+        <li>${bold('Timezone', data.geo?.timezone)} (Browser: ${data.passive?.timezone})</li>
+      </ul>
 
-    <h3>🖥️ System Info</h3>
-    <ul>
-      <li>${bold('OS Platform', data.passive?.platform)}</li>
-      <li>${bold('Browser', browser)}</li>
-      <li>${bold('Screen', `${data.passive?.screen?.width}×${data.passive?.screen?.height}, ${data.passive?.screen?.colorDepth}-bit`)}</li>
-      <li>${bold('Languages', data.passive?.languages?.join(', '))}</li>
-    </ul>
+      <h3>🖥️ System Info</h3>
+      <ul>
+        <li>${bold('OS Platform', data.passive?.platform)}</li>
+        <li>${bold('Browser', browser)}</li>
+        <li>${bold('Screen', `${data.passive?.screen?.width}×${data.passive?.screen?.height}, ${data.passive?.screen?.colorDepth}-bit`)}</li>
+        <li>${bold('Languages', data.passive?.languages?.join(', '))}</li>
+      </ul>
 
-    <h3>⚙️ Hardware</h3>
-    <ul>
-      <li>${bold('CPU Cores', data.components?.hardwareConcurrency?.value)}</li>
-      <li>${bold('RAM', `${data.components?.deviceMemory?.value} GB`)}</li>
-      <li>${bold('GPU', data.components?.videoCard?.value?.renderer)}</li>
-    </ul>
+      <h3>⚙️ Hardware</h3>
+      <ul>
+        <li>${bold('CPU Cores', data.components?.hardwareConcurrency?.value)}</li>
+        <li>${bold('RAM', `${data.components?.deviceMemory?.value} GB`)}</li>
+        <li>${bold('GPU', data.components?.videoCard?.value?.renderer)}</li>
+      </ul>
 
-    <h3>🔐 Fingerprint</h3>
-    <ul>
-      <li>${bold('Visitor ID', data.visitorId)}</li>
-      <li>${bold('Confidence Score', `${Math.round((data.confidence?.score || 0) * 100)}%`)}</li>
-      <li>${bold('Fonts', fonts)}</li>
-    </ul>
+      <h3>🔐 Fingerprint</h3>
+      <ul>
+        <li>${bold('Visitor ID', data.visitorId)}</li>
+        <li>${bold('Confidence Score', `${Math.round((data.confidence?.score || 0) * 100)}%`)}</li>
+        <li>${bold('Fonts', fonts)}</li>
+      </ul>
+  
+      <h3>📦 Storage Support</h3>
+      <ul>
+        <li>${bold('Local Storage', data.components?.localStorage?.value ? '✅' : '❌')}</li>
+        <li>${bold('Session Storage', data.components?.sessionStorage?.value ? '✅' : '❌')}</li>
+        <li>${bold('IndexedDB', data.components?.indexedDB?.value ? '✅' : '❌')}</li>
+        <li>${bold('Cookies Enabled', data.components?.cookiesEnabled?.value ? '✅' : '❌')}</li>
+      </ul>
+    `;
 
-    <h3>📦 Storage Support</h3>
-    <ul>
-      <li>${bold('Local Storage', data.components?.localStorage?.value ? '✅' : '❌')}</li>
-      <li>${bold('Session Storage', data.components?.sessionStorage?.value ? '✅' : '❌')}</li>
-      <li>${bold('IndexedDB', data.components?.indexedDB?.value ? '✅' : '❌')}</li>
-      <li>${bold('Cookies Enabled', data.components?.cookiesEnabled?.value ? '✅' : '❌')}</li>
-    </ul>
-  `;
-
-  panel.style.display = 'block';
-}
-;
+    panel.style.display = 'block';
+  }
+  ;
 
     await fetch('/collect-fingerprint', {
       method: 'POST',
