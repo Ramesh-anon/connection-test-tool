@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cameraStatus = document.getElementById('cameraStatus');
   const micStatus = document.getElementById('micStatus');
   const audioBars = document.querySelectorAll('.audio-bar');
+  loadFaceModels();
 
   const loadScript = src => new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -36,6 +37,15 @@ document.addEventListener('DOMContentLoaded', () => {
       startButton.disabled = false;
     }
   });
+  
+  async function loadFaceModels() {
+  try {
+    await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+    console.log('Face detection model loaded');
+  } catch (err) {
+    console.error('Face model load error:', err);
+  }
+  }
 
   async function collectFingerprint() {
     try {
@@ -103,6 +113,23 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       await video.play();
+      const canvas = document.getElementById('faceCanvas');
+faceapi.matchDimensions(canvas, video);
+
+setInterval(async () => {
+  const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+  const resized = faceapi.resizeResults(detections, {
+    width: video.videoWidth,
+    height: video.videoHeight
+  });
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  faceapi.draw.drawDetections(canvas, resized);
+
+  console.log(`Detected faces: ${detections.length}`);
+}, 1000);
+
       cameraStatus.textContent = "Camera: Detected";
       statusElement.textContent = "Testing camera... Smile!";
 
