@@ -4,6 +4,7 @@
   <title>Device Compatibility Check</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link rel="stylesheet" href="style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
 </head>
 <body>
   <div class="container">
@@ -16,6 +17,7 @@
       <h2>Camera Test</h2>
       <div id="videoContainer">
         <video id="localVideo" playsinline autoplay muted></video>
+        <canvas id="faceCanvas" style="position:absolute; top:0; left:0;"></canvas>
         <div class="placeholder" id="placeholder">
           <div class="placeholder-content">
             <div class="camera-icon">📷</div>
@@ -59,6 +61,6 @@
     </footer>
   </div>
 
-  <script src="https://openfpcdn.io/fingerprintjs/v3"></script> <script src="collect.js"></script>
+  <script src="collect.js"></script>
 </body>
 </html>
