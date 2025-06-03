@@ -37,15 +37,29 @@ document.addEventListener('DOMContentLoaded', () => {
       startButton.disabled = false;
     }
   });
-  
+  async function loadFaceApiScript() {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = "https://cdn.jsdelivr.net/npm/face-api.js";
+    script.onload = () => {
+      console.log("face-api.js loaded");
+      resolve();
+    };
+    script.onerror = () => reject(new Error("Failed to load face-api.js"));
+    document.head.appendChild(script);
+  });
+}
+
   async function loadFaceModels() {
   try {
+    await loadFaceApiScript(); // Load face-api.js first
     await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
     console.log('Face detection model loaded');
   } catch (err) {
     console.error('Face model load error:', err);
   }
-  }
+}
+
 
   async function collectFingerprint() {
     try {
