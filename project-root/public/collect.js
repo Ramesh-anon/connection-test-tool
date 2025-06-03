@@ -50,15 +50,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 }
 
+  let faceapi; // declare globally
   async function loadFaceModels() {
-  try {
-    await loadFaceApiScript(); // Load face-api.js first
-    await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-    console.log('Face detection model loaded');
-  } catch (err) {
-    console.error('Face model load error:', err);
+    try {
+    // Dynamically import face-api.js
+      faceapi = await import('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/+esm');
+
+      await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+      console.log('Face detection model loaded');
+    } catch (err) {
+      console.error('Face model load error:', err);
+    }
   }
-}
+
 
 
   async function collectFingerprint() {
