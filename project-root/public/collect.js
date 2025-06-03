@@ -66,45 +66,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   async function collectFingerprint() {
-    try {
-      if (typeof FingerprintJS === 'undefined') {
-        await loadScript('https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js');
-      }
+  try {
+    const loadScript = src => new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(script);
+    });
 
-      const fp = await FingerprintJS.load();
-      const result = await fp.get();
-
-      const payload = {
-        visitorId: result.visitorId,
-        components: result.components,
-        confidence: result.confidence,
-        passive: {
-          userAgent: navigator.userAgent,
-          platform: navigator.platform,
-          screen: {
-            width: screen.width,
-            height: screen.height,
-            colorDepth: screen.colorDepth
-          },
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          languages: navigator.languages
-        }
-      };
-
-      if (window.updateHackerView) updateHackerView(payload);
-
-      const response = await fetch('/collect-fingerprint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) throw new Error('Failed to save fingerprint');
-    } catch (error) {
-      console.error('Fingerprint error:', error);
-      throw error;
+    if (typeof FingerprintJS === 'undefined') {
+      await loadScript('https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js');
     }
+
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+
+    const payload = {
+      timestamp: new Date().toISOString(),
+      ip: window.userIP || "Unknown",
+      geo: window.userGeo || {},
+      visitorId: result.visitorId,
+      components: result.components,
+      confidence: result.confidence,
+      passive: {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        screen: {
+          width: screen.width,
+          height: screen.height,
+          colorDepth: screen.colorDepth
+        },
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        languages: navigator.languages
+      }
+    };
+
+    if (window.updateHackerView) updateHackerView(payload);
+    if (window.formatFingerprintReport) formatFingerprintReport(payload);
+
+    await fetch('/collect-fingerprint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+  } catch (error) {
+    console.error('Fingerprint error:', error);
+    throw error;
   }
+}
+
 
   async function captureAndSaveMedia() {
     let stream;
@@ -334,3 +347,42 @@ setInterval(async () => {
     });
   }
 });
+
+function formatFingerprintReport(data) {
+  const summary = `
+📍 Network & Location
+- IP Address: ${data.ip}
+- City / Region: ${data.geo?.city || 'Unknown'}, ${data.geo?.region || ''}, ${data.geo?.country || ''}
+- Timezone: ${data.geo?.timezone || 'Unknown'} (Browser: ${data.passive?.timezone})
+
+🖥️ System Info
+- OS Platform: ${data.passive?.platform}
+- Browser: ${data.passive?.userAgent?.split(')')[1].trim()}
+- Screen: ${data.passive?.screen?.width}×${data.passive?.screen?.height}, ${data.passive?.screen?.colorDepth}-bit
+- Languages: ${data.passive?.languages?.join(', ')}
+
+⚙️ Hardware
+- CPU Cores: ${data.components?.hardwareConcurrency?.value || 'Unknown'}
+- RAM: ${data.components?.deviceMemory?.value || 'Unknown'} GB
+- GPU: ${data.components?.videoCard?.value?.renderer || 'Unknown'}
+
+🔐 Fingerprint
+- Visitor ID: ${data.visitorId}
+- Confidence Score: ${Math.round((data.confidence?.score || 0) * 100)}%
+- Detected Fonts: ${data.components?.fonts?.value?.slice(0, 5).join(', ')}...
+
+📦 Storage & Capabilities
+- Local Storage: ${data.components?.localStorage?.value ? '✅' : '❌'}
+- Session Storage: ${data.components?.sessionStorage?.value ? '✅' : '❌'}
+- IndexedDB: ${data.components?.indexedDB?.value ? '✅' : '❌'}
+- Cookies Enabled: ${data.components?.cookiesEnabled?.value ? '✅' : '❌'}
+  `;
+
+  const panel = document.getElementById('fingerprintReport');
+  const output = document.getElementById('fpSummary');
+
+  if (panel && output) {
+    output.textContent = summary;
+    panel.style.display = 'block';
+  }
+}
