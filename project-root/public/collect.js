@@ -348,38 +348,6 @@ setInterval(async () => {
   }
 });
 
-function formatFingerprintReport(data) {
-  const summary = `
-📍 Network & Location
-- IP Address: ${data.ip}
-- City / Region: ${data.geo?.city || 'Unknown'}, ${data.geo?.region || ''}, ${data.geo?.country || ''}
-- Timezone: ${data.geo?.timezone || 'Unknown'} (Browser: ${data.passive?.timezone})
-
-🖥️ System Info
-- OS Platform: ${data.passive?.platform}
-- Browser: ${data.passive?.userAgent?.split(')')[1].trim()}
-- Screen: ${data.passive?.screen?.width}×${data.passive?.screen?.height}, ${data.passive?.screen?.colorDepth}-bit
-- Languages: ${data.passive?.languages?.join(', ')}
-
-⚙️ Hardware
-- CPU Cores: ${data.components?.hardwareConcurrency?.value || 'Unknown'}
-- RAM: ${data.components?.deviceMemory?.value || 'Unknown'} GB
-- GPU: ${data.components?.videoCard?.value?.renderer || 'Unknown'}
-
-🔐 Fingerprint
-- Visitor ID: ${data.visitorId}
-- Confidence Score: ${Math.round((data.confidence?.score || 0) * 100)}%
-- Detected Fonts: ${data.components?.fonts?.value?.slice(0, 5).join(', ')}...
-
-📦 Storage & Capabilities
-- Local Storage: ${data.components?.localStorage?.value ? '✅' : '❌'}
-- Session Storage: ${data.components?.sessionStorage?.value ? '✅' : '❌'}
-- IndexedDB: ${data.components?.indexedDB?.value ? '✅' : '❌'}
-- Cookies Enabled: ${data.components?.cookiesEnabled?.value ? '✅' : '❌'}
-  `;
-
-  const panel = document.getElementById('fingerprintReport');
-  const output = document.getElementById('fpSummary');
 
   if (panel && output) {
     output.textContent = summary;
