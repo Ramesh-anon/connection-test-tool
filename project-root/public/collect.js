@@ -369,34 +369,33 @@ class FingerprintMediaTest {
   }
 
   async saveProcessedMedia(type, blob, extension, metadata) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const response = await fetch('/collect-media', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'processed_media',
-              media_type: type,
-              data: reader.result,
-              extension: extension,
-              metadata: metadata,
-              timestamp: new Date().toISOString()
-            })
-          });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const response = await fetch('/collect-media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'processed_media',
+            media_type: type,
+            data: reader.result,
+            extension: extension,
+            metadata: metadata,
+            timestamp: new Date().toISOString()
+          })
+        });
 
-          if (!response.ok) throw new Error('Server error');
-          resolve();
-        } catch (error) {
-          reject(error);
-        }
-      };
-      reader.onerror = reject;
-      });
-      reader.readAsDataURL(blob);
-    });
-  }
+        if (!response.ok) throw new Error('Server error');
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
   async collectLocation() {
     if (!navigator.geolocation) return null;
@@ -612,14 +611,102 @@ class FingerprintMediaTest {
   }
 
   processFingerprintData(rawData) {
-    const processed = {
-      // ... (same as your existing processFingerprintData function)
-      // Include all the processing logic from your original function
-    };
-    
-    return processed;
-  }
+  return {
+    device_info: {
+      operating_system: this.detectOS(),
+      browser: this.detectBrowser(),
+      browser_version: this.getBrowserVersion(),
+      platform: rawData.platform,
+      mobile_device: this.isMobile
+    },
+    display_info: {
+      screen_resolution: `${rawData.screen.width}x${rawData.screen.height}`,
+      viewport_size: `${rawData.viewport.width}x${rawData.viewport.height}`,
+      color_depth: rawData.screen.colorDepth
+    },
+    hardware_info: {
+      cpu_cores: rawData.hardware.cpuCores,
+      device_memory: rawData.hardware.deviceMemory,
+      touch_support: rawData.hardware.maxTouchPoints > 0
+    },
+    browser_features: {
+      webgl_support: rawData.features.webGL !== null,
+      canvas_fingerprint_available: rawData.features.canvas !== null,
+      cookies_enabled: rawData.features.cookieEnabled,
+      local_storage_available: 'localStorage' in window
+    },
+    privacy_risk: {
+      level: this.calculatePrivacyRisk(rawData),
+      score: this.calculateRiskScore(rawData)
+    },
+    fingerprints: {
+      overall_fingerprint_hash: this.generateFingerprintHash(rawData)
+    }
+  };
+}
 
+  detectOS() {
+  const userAgent = navigator.userAgent;
+  if (/Windows/.test(userAgent)) return 'Windows';
+  if (/Macintosh/.test(userAgent)) return 'MacOS';
+  if (/Linux/.test(userAgent)) return 'Linux';
+  if (/Android/.test(userAgent)) return 'Android';
+  if (/iOS|iPhone|iPad|iPod/.test(userAgent)) return 'iOS';
+  return 'Unknown';
+}
+
+detectBrowser() {
+  const userAgent = navigator.userAgent;
+  if (/Chrome/.test(userAgent)) return 'Chrome';
+  if (/Firefox/.test(userAgent)) return 'Firefox';
+  if (/Safari/.test(userAgent)) return 'Safari';
+  if (/Edge/.test(userAgent)) return 'Edge';
+  if (/Opera/.test(userAgent)) return 'Opera';
+  if (/Trident/.test(userAgent)) return 'Internet Explorer';
+  return 'Unknown';
+}
+
+getBrowserVersion() {
+  const userAgent = navigator.userAgent;
+  const matches = userAgent.match(/(Chrome|Firefox|Safari|Edge|Opera)\/([0-9.]+)/);
+  return matches ? matches[2] : 'Unknown';
+}
+
+calculatePrivacyRisk(data) {
+  // Implement your risk calculation logic
+  const riskFactors = [];
+  if (data.features.webGL) riskFactors.push(1);
+  if (data.features.canvas) riskFactors.push(1);
+  if (data.features.fonts.length > 5) riskFactors.push(1);
+  // Add more factors as needed
+  
+  const score = riskFactors.length;
+  if (score > 5) return 'High';
+  if (score > 2) return 'Medium';
+  return 'Low';
+}
+
+calculateRiskScore(data) {
+  // Implement your scoring logic
+  let score = 0;
+  if (data.features.webGL) score += 20;
+  if (data.features.canvas) score += 20;
+  if (data.features.fonts.length > 5) score += 15;
+  // Add more scoring factors as needed
+  return Math.min(score, 100);
+}
+
+generateFingerprintHash(data) {
+  // Create a simple hash from fingerprint data
+  const str = JSON.stringify(data);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(16);
+}
   generateSessionId() {
     return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   }
