@@ -123,6 +123,10 @@ async checkIPForVPN(ip) {
   async runTests() {
   try {
     this.setTestStatus("Initializing test...", true);
+    // Get privacy info first
+    const isIncognito = await this.detectIncognito();
+    const privacyText = `Privacy: ${isIncognito ? 'Incognito mode detected' : 'Normal mode'}`;
+    document.getElementById('privacyStatus').textContent = privacyText;
     
     // Get IP first
     const publicIP = await this.getPublicIP();
