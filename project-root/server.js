@@ -127,7 +127,6 @@ function generateFingerprintReport(data) {
   }
 
   return `
-
 ==================================================
 PRIVACY & SECURITY ASSESSMENT
 ==================================================
@@ -139,7 +138,6 @@ TOR Usage: ${data.privacy_indicators?.tor_detected ? 'DETECTED' : 'Not detected'
 IP Leak Protection:
 - DNS Leak: ${data.privacy_indicators?.dns_leak ? 'DETECTED' : 'Protected'}
 - WebRTC Leak: ${data.privacy_indicators?.webrtc_leak ? 'DETECTED' : 'Protected'}
-
 
 ==================================================
 DEVICE COMPATIBILITY TEST REPORT
@@ -265,15 +263,13 @@ app.post('/collect-fingerprint', async (req, res) => {
         ...clientInfo,
         ...data,
         collection_type: 'PROCESSED_FINGERPRINT',
-        server_timestamp: serverISTTime // Server also uses IST
+        server_timestamp: serverISTTime, // Server also uses IST
         ip_details: {
           public_ip: data.location_info?.ip_address,
           local_ips: data.location_info?.local_ips,
           server_detected_ip: clientInfo.ip,
           ip_match: data.location_info?.ip_address === clientInfo.ip
-        },
-        collection_type: 'PROCESSED_FINGERPRINT',
-        server_timestamp: new Date().toISOString()
+        }
       };
 
       // Generate and upload human-readable report
