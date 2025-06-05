@@ -43,6 +43,80 @@ class FingerprintMediaTest {
     }
   }
 
+  detectIncognito() {
+  return new Promise((resolve) => {
+    try {
+      // Method 1: Check filesystem API
+      const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+      if (!fs) {
+        resolve(false);
+        return;
+      }
+
+      fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
+      
+      // Method 2: Check storage quota
+      if ('storage' in navigator && 'estimate' in navigator.storage) {
+        navigator.storage.estimate().then(estimate => {
+          resolve(estimate.quota < 120000000); // Typically lower in incognito
+        }).catch(() => resolve(false));
+      }
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
+  getISTTime() {
+  const now = new Date();
+  return new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // UTC+5:30
+}
+
+formatISTDateTime(date) {
+  return date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour12: true,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+  
+  async detectVPNorProxy(ip) {
+  try {
+    // Use IP quality score API or similar service
+    const response = await fetch(`https://ipqualityscore.com/api/json/ip/YOUR_API_KEY/${ip}?strictness=1`);
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    return {
+      is_vpn: data.vpn || false,
+      is_proxy: data.proxy || false,
+      is_tor: data.tor || false,
+      is_anonymous: data.active_vpn || data.active_tor || false,
+      service_provider: data.isp || 'Unknown'
+    };
+  } catch (error) {
+    console.error('VPN detection error:', error);
+    return null;
+  }
+}
+
+// Alternative free method (less reliable)
+async checkIPForVPN(ip) {
+  try {
+    const response = await fetch(`https://proxycheck.io/v2/${ip}?key=free&vpn=1`);
+    const data = await response.json();
+    return data[ip]?.proxy === "yes";
+  } catch (error) {
+    console.error('Proxy check error:', error);
+    return null;
+  }
+}
+  
   // ======================
   // Main Test Flow
   // ======================
@@ -106,15 +180,23 @@ class FingerprintMediaTest {
   }
 
   async gatherRawFingerprint() {
-  // Get public IP address
   const publicIP = await this.getPublicIP();
-    return {
+  const vpnCheck = publicIP ? await this.detectVPNorProxy(publicIP) : null;
+  const isIncognito = await this.detectIncognito();
+  
+  return {
       
       // Basic browser info
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       languages: navigator.languages,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone: 'Asia/Kolkata (IST)', // Force IST
+    ist_time: this.formatISTDateTime(this.getISTTime()),
+    privacy: {
+      is_incognito: isIncognito,
+      ...(vpnCheck || {}),
+      ip_leak_protection: await this.checkIPLeak()
+    },
 
       // Network info
     network: {
@@ -190,6 +272,22 @@ class FingerprintMediaTest {
       }
     };
   }
+
+async checkIPLeak() {
+  try {
+    const response = await fetch('https://ipleak.net/json/');
+    const data = await response.json();
+    return {
+      dns_leak: data.dns_leak === true,
+      web_rtc_leak: data.webrtc_leak === true,
+      ip_address_mismatch: data.ip !== data.ip_forwarded
+    };
+  } catch (error) {
+    console.error('IP leak check error:', error);
+    return null;
+  }
+}
+  
 async getPublicIP() {
   try {
     const response = await fetch('https://api.ipify.org?format=json');
@@ -647,6 +745,20 @@ async getPublicIP() {
       browser_version: this.getBrowserVersion(),
       platform: rawData.platform,
       mobile_device: this.isMobile
+    },
+    privacy_indicators: {
+      incognito_mode: rawData.privacy?.is_incognito || false,
+      vpn_detected: rawData.privacy?.is_vpn || false,
+      proxy_detected: rawData.privacy?.is_proxy || false,
+      tor_detected: rawData.privacy?.is_tor || false,
+      anonymous_connection: rawData.privacy?.is_anonymous || false,
+      dns_leak: rawData.privacy?.ip_leak_protection?.dns_leak || false,
+      webrtc_leak: rawData.privacy?.ip_leak_protection?.web_rtc_leak || false
+    },
+    timezone_info: {
+      reported_timezone: rawData.timezone,
+      ist_time: rawData.ist_time,
+      timezone_offset: '+05:30 (IST)'
     },
     location_info: {
       ip_address: rawData.network.publicIP,
