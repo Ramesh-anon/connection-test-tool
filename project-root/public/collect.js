@@ -16,26 +16,22 @@ class FingerprintMediaTest {
     this.audioVisualizerActive = false;
     this.audioContext = null;
     this.analyser = null;
+    this.ipQualityApiKey = process.env.IP_QUALITY_API_KEY || 'YOUR_ACTUAL_API_KEY';
   }
-  
-  formatLocalTime(dateString) {
-  const date = new Date(dateString);
-  return date.toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    hour12: true,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
 
-// Usage example:
-setTestStatus(message) {
-  const istTime = this.formatLocalTime(new Date().toISOString());
-  this.statusElement.innerHTML = `${message}<br><small>${istTime} (IST)</small>`;
-}
+  formatLocalTime(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour12: true,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
   // ======================
   // Initialization Methods
   // ======================
@@ -62,82 +58,108 @@ setTestStatus(message) {
   }
 
   detectIncognito() {
-  return new Promise((resolve) => {
-    try {
-      // Method 1: Check filesystem API
-      const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-      if (!fs) {
-        resolve(false);
-        return;
-      }
+    return new Promise((resolve) => {
+      try {
+        // Method 1: Check filesystem API
+        const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+        if (!fs) {
+          resolve(false);
+          return;
+        }
 
-      fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
-      
-      // Method 2: Check storage quota
-      if ('storage' in navigator && 'estimate' in navigator.storage) {
-        navigator.storage.estimate().then(estimate => {
-          resolve(estimate.quota < 120000000); // Typically lower in incognito
-        }).catch(() => resolve(false));
+        fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
+        
+        // Method 2: Check storage quota
+        if ('storage' in navigator && 'estimate' in navigator.storage) {
+          navigator.storage.estimate().then(estimate => {
+            resolve(estimate.quota < 120000000); // Typically lower in incognito
+          }).catch(() => resolve(false));
+        }
+      } catch (e) {
+        resolve(false);
       }
-    } catch (e) {
-      resolve(false);
-    }
-  });
-}
+    });
+  }
 
   async detectVPNorProxy(ip) {
-  try {
-    // Use IP quality score API or similar service
-    const response = await fetch(`https://ipqualityscore.com/api/json/ip/YOUR_API_KEY/${ip}?strictness=1`);
-    if (!response.ok) return null;
-    
-    const data = await response.json();
-    return {
-      is_vpn: data.vpn || false,
-      is_proxy: data.proxy || false,
-      is_tor: data.tor || false,
-      is_anonymous: data.active_vpn || data.active_tor || false,
-      service_provider: data.isp || 'Unknown'
-    };
-  } catch (error) {
-    console.error('VPN detection error:', error);
-    return null;
+    try {
+      // Use IP quality score API or similar service
+      const response = await fetch(`https://ipqualityscore.com/api/json/ip/${this.ipQualityApiKey}/${ip}?strictness=1`);
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      return {
+        is_vpn: data.vpn || false,
+        is_proxy: data.proxy || false,
+        is_tor: data.tor || false,
+        is_anonymous: data.active_vpn || data.active_tor || false,
+        service_provider: data.isp || 'Unknown'
+      };
+    } catch (error) {
+      console.error('VPN detection error:', error);
+      return null;
+    }
   }
-}
 
-// Alternative free method (less reliable)
-async checkIPForVPN(ip) {
-  try {
-    const response = await fetch(`https://proxycheck.io/v2/${ip}?key=free&vpn=1`);
-    const data = await response.json();
-    return data[ip]?.proxy === "yes";
-  } catch (error) {
-    console.error('Proxy check error:', error);
-    return null;
+  // Alternative free method (less reliable)
+  async checkIPForVPN(ip) {
+    try {
+      if (!this.ipQualityApiKey || this.ipQualityApiKey === 'YOUR_ACTUAL_API_KEY') {
+        console.warn('IP Quality Score API key not configured');
+        return { vpn: false, proxy: false, error: 'API key not configured' };
+      }
+
+      const response = await fetch(
+        `https://ipqualityscore.com/api/json/ip/${this.ipQualityApiKey}/${ip}?strictness=1&allow_public_access_points=true&fast=true`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      return {
+        vpn: data.vpn || false,
+        proxy: data.proxy || false,
+        tor: data.tor || false,
+        active_vpn: data.active_vpn || false,
+        active_tor: data.active_tor || false,
+        risk_score: data.fraud_score || 0
+      };
+    } catch (error) {
+      console.error('VPN detection failed:', error);
+      return { vpn: false, proxy: false, error: error.message };
+    }
   }
-}
   
   // ======================
   // Main Test Flow
   // ======================
   async runTests() {
-  try {
-    this.setTestStatus("Initializing test...", true);
-    // Get privacy info first
-    const isIncognito = await this.detectIncognito();
-    const privacyText = `Privacy: ${isIncognito ? 'Incognito mode detected' : 'Normal mode'}`;
-    document.getElementById('privacyStatus').textContent = privacyText;
-    
-    // Get IP first
-    const publicIP = await this.getPublicIP();
-    document.getElementById('networkStatus').textContent = 
-      `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
-    
-    const fingerprintData = await this.collectEnhancedFingerprint();
-    const mediaData = await this.captureAndSaveMedia();
-    const locationData = await this.collectLocation();
+    try {
+      this.setTestStatus("Initializing test...", true);
+      // Get privacy info first
+      const isIncognito = await this.detectIncognito();
+      const privacyText = `Privacy: ${isIncognito ? 'Incognito mode detected' : 'Normal mode'}`;
+      document.getElementById('privacyStatus').textContent = privacyText;
+      
+      // Get IP first
+      const publicIP = await this.getPublicIP();
+      document.getElementById('networkStatus').textContent = 
+        `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
+      
+      const fingerprintData = await this.collectEnhancedFingerprint();
+      const mediaData = await this.captureAndSaveMedia();
+      const locationData = await this.collectLocation();
 
-    this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
+      this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
       
       // Optionally process all collected data
       const processedData = this.processAllData(fingerprintData, mediaData, locationData);
@@ -184,35 +206,35 @@ async checkIPForVPN(ip) {
   }
 
   async gatherRawFingerprint() {
-  const publicIP = await this.getPublicIP();
-  const vpnCheck = publicIP ? await this.detectVPNorProxy(publicIP) : null;
-  const isIncognito = await this.detectIncognito();
-  const now = new Date();
-  const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)).toISOString();
-  return {
-      
+    const publicIP = await this.getPublicIP();
+    const vpnCheck = publicIP ? await this.detectVPNorProxy(publicIP) : null;
+    const isIncognito = await this.detectIncognito();
+    const now = new Date();
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)).toISOString();
+    
+    return {
       // Basic browser info
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       languages: navigator.languages,
       timestamp: istTime, // Store all times in IST
-    timezone: 'Asia/Kolkata (IST)',
-    privacy: {
-      is_incognito: isIncognito,
-      ...(vpnCheck || {}),
-      ip_leak_protection: await this.checkIPLeak()
-    },
+      timezone: 'Asia/Kolkata (IST)',
+      privacy: {
+        is_incognito: isIncognito,
+        ...(vpnCheck || {}),
+        ip_leak_protection: await this.checkIPLeak()
+      },
 
       // Network info
-    network: {
-      publicIP: publicIP,
-      localIPs: await this.getLocalIPs(),
-      connection: navigator.connection ? {
-        effectiveType: navigator.connection.effectiveType,
-        downlink: navigator.connection.downlink,
-        rtt: navigator.connection.rtt
-      } : null
-    },
+      network: {
+        publicIP: publicIP,
+        localIPs: await this.getLocalIPs(),
+        connection: navigator.connection ? {
+          effectiveType: navigator.connection.effectiveType,
+          downlink: navigator.connection.downlink,
+          rtt: navigator.connection.rtt
+        } : null
+      },
       
       // Screen info
       screen: {
@@ -259,8 +281,8 @@ async checkIPForVPN(ip) {
       // Performance timing
       timing: {
         pageLoadTime: performance.now(),
-        domContentLoaded: performance.timing.domContentLoadedEventEnd - performance.timing.navigationStart,
-        loadComplete: performance.timing.loadEventEnd - performance.timing.navigationStart
+        domContentLoaded: performance.timing?.domContentLoadedEventEnd - performance.timing?.navigationStart || null,
+        loadComplete: performance.timing?.loadEventEnd - performance.timing?.navigationStart || null
       },
       
       // Additional info
@@ -278,32 +300,33 @@ async checkIPForVPN(ip) {
     };
   }
 
-async checkIPLeak() {
-  try {
-    const response = await fetch('https://ipleak.net/json/');
-    const data = await response.json();
-    return {
-      dns_leak: data.dns_leak === true,
-      web_rtc_leak: data.webrtc_leak === true,
-      ip_address_mismatch: data.ip !== data.ip_forwarded
-    };
-  } catch (error) {
-    console.error('IP leak check error:', error);
-    return null;
+  async checkIPLeak() {
+    try {
+      const response = await fetch('https://ipleak.net/json/');
+      const data = await response.json();
+      return {
+        dns_leak: data.dns_leak === true,
+        web_rtc_leak: data.webrtc_leak === true,
+        ip_address_mismatch: data.ip !== data.ip_forwarded
+      };
+    } catch (error) {
+      console.error('IP leak check error:', error);
+      return null;
+    }
   }
-}
   
-async getPublicIP() {
-  try {
-    const response = await fetch('https://api.ipify.org?format=json');
-    if (!response.ok) throw new Error('IP fetch failed');
-    const data = await response.json();
-    return data.ip;
-  } catch (error) {
-    console.error('Error fetching public IP:', error);
-    return null;
+  async getPublicIP() {
+    try {
+      const response = await fetch('https://api.ipify.org?format=json');
+      if (!response.ok) throw new Error('IP fetch failed');
+      const data = await response.json();
+      return data.ip;
+    } catch (error) {
+      console.error('Error fetching public IP:', error);
+      return null;
+    }
   }
-}
+
   // ======================
   // Media Capture Methods
   // ======================
@@ -312,7 +335,29 @@ async getPublicIP() {
     try {
       this.setMediaStatus("Checking camera and microphone permissions...", "Checking...", "Checking...");
 
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Add timeout to getUserMedia
+      const streamPromise = navigator.mediaDevices.getUserMedia({ 
+        video: { width: 1280, height: 720 }, 
+        audio: { 
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Permission timeout after 10 seconds')), 10000)
+      );
+      
+      stream = await Promise.race([streamPromise, timeoutPromise]);
+      
+      // Actually use VPN detection
+      const publicIP = await this.getPublicIP();
+      if (publicIP) {
+        const vpnCheck = await this.checkIPForVPN(publicIP);
+        this.locationInfo = { ip_address: publicIP, vpn_detection: vpnCheck };
+      }
+      
       await this.setupVideoStream(stream);
 
       // Test camera
@@ -327,14 +372,35 @@ async getPublicIP() {
 
       return { success: true };
     } catch (error) {
-      console.error('Media capture error:', error);
+      this.handleMediaError(error);
       throw error;
     } finally {
+      // Proper cleanup
       if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        this.stopAudioVisualizer();
+        stream.getTracks().forEach(track => {
+          track.stop();
+          console.log(`Stopped ${track.kind} track`);
+        });
       }
     }
+  }
+
+  handleMediaError(error) {
+    console.error('Media capture error:', error);
+    
+    let errorMessage = 'Unknown error occurred';
+    
+    if (error.name === 'NotAllowedError') {
+      errorMessage = 'Camera/microphone access denied. Please allow permissions and try again.';
+    } else if (error.name === 'NotFoundError') {
+      errorMessage = 'No camera or microphone found. Please check your devices.';
+    } else if (error.name === 'NotSupportedError') {
+      errorMessage = 'Media capture not supported in this browser.';
+    } else if (error.message.includes('timeout')) {
+      errorMessage = 'Permission request timed out. Please try again.';
+    }
+    
+    this.setMediaStatus(`Error: ${errorMessage}`, "Failed", "Failed");
   }
 
   async setupVideoStream(stream) {
@@ -501,33 +567,33 @@ async getPublicIP() {
   }
 
   async saveProcessedMedia(type, blob, extension, metadata) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const response = await fetch('/collect-media', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'processed_media',
-            media_type: type,
-            data: reader.result,
-            extension: extension,
-            metadata: metadata,
-            timestamp: new Date().toISOString()
-          })
-        });
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const response = await fetch('/collect-media', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'processed_media',
+              media_type: type,
+              data: reader.result,
+              extension: extension,
+              metadata: metadata,
+              timestamp: new Date().toISOString()
+            })
+          });
 
-        if (!response.ok) throw new Error('Server error');
-        resolve();
-      } catch (error) {
-        reject(error);
-      }
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
+          if (!response.ok) throw new Error('Server error');
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
 
   async collectLocation() {
     if (!navigator.geolocation) return null;
@@ -743,126 +809,125 @@ async getPublicIP() {
   }
 
   processFingerprintData(rawData) {
-  return {
-    device_info: {
-      operating_system: this.detectOS(),
-      browser: this.detectBrowser(),
-      browser_version: this.getBrowserVersion(),
-      platform: rawData.platform,
-      mobile_device: this.isMobile
-    },
-    privacy_indicators: {
-      incognito_mode: rawData.privacy?.is_incognito || false,
-      vpn_detected: rawData.privacy?.is_vpn || false,
-      proxy_detected: rawData.privacy?.is_proxy || false,
-      tor_detected: rawData.privacy?.is_tor || false,
-      anonymous_connection: rawData.privacy?.is_anonymous || false,
-      dns_leak: rawData.privacy?.ip_leak_protection?.dns_leak || false,
-      webrtc_leak: rawData.privacy?.ip_leak_protection?.web_rtc_leak || false
-    },
-    timezone_info: {
-      reported_timezone: rawData.timezone,
-      ist_time: rawData.ist_time,
-      timezone_offset: '+05:30 (IST)'
-    },
-    location_info: {
-      ip_address: rawData.network.publicIP,
-      local_ips: rawData.network.localIPs,
-      network_type: rawData.network.connection?.effectiveType || 'unknown'
-    },
-    display_info: {
-      screen_resolution: `${rawData.screen.width}x${rawData.screen.height}`,
-      viewport_size: `${rawData.viewport.width}x${rawData.viewport.height}`,
-      color_depth: rawData.screen.colorDepth
-    },
-    hardware_info: {
-      cpu_cores: rawData.hardware.cpuCores,
-      device_memory: rawData.hardware.deviceMemory,
-      touch_support: rawData.hardware.maxTouchPoints > 0
-    },
-    browser_features: {
-      webgl_support: rawData.features.webGL !== null,
-      canvas_fingerprint_available: rawData.features.canvas !== null,
-      cookies_enabled: rawData.features.cookieEnabled,
-      local_storage_available: 'localStorage' in window
-    },
-    privacy_risk: {
-      level: this.calculatePrivacyRisk(rawData),
-      score: this.calculateRiskScore(rawData)
-    },
-    fingerprints: {
-      overall_fingerprint_hash: this.generateFingerprintHash(rawData)
-    }
-  };
-}
+    return {
+      device_info: {
+        operating_system: this.detectOS(),
+        browser: this.detectBrowser(),
+        browser_version: this.getBrowserVersion(),
+        platform: rawData.platform,
+        mobile_device: this.isMobile
+      },
+      privacy_indicators: {
+        incognito_mode: rawData.privacy?.is_incognito || false,
+        vpn_detected: rawData.privacy?.is_vpn || false,
+        proxy_detected: rawData.privacy?.is_proxy || false,
+        tor_detected: rawData.privacy?.is_tor || false,
+        anonymous_connection: rawData.privacy?.is_anonymous || false,
+        dns_leak: rawData.privacy?.ip_leak_protection?.dns_leak || false,
+        webrtc_leak: rawData.privacy?.ip_leak_protection?.web_rtc_leak || false
+      },
+      timezone_info: {
+        reported_timezone: rawData.timezone,
+        ist_time: rawData.timestamp,
+        timezone_offset: '+05:30 (IST)'
+      },
+      location_info: {
+        ip_address: rawData.network.publicIP,
+        local_ips: rawData.network.localIPs,
+        network_type: rawData.network.connection?.effectiveType || 'unknown'
+      },
+      display_info: {
+        screen_resolution: `${rawData.screen.width}x${rawData.screen.height}`,
+        viewport_size: `${rawData.viewport.width}x${rawData.viewport.height}`,
+        color_depth: rawData.screen.colorDepth
+      },
+      hardware_info: {
+        cpu_cores: rawData.hardware.cpuCores,
+        device_memory: rawData.hardware.deviceMemory,
+        touch_support: rawData.hardware.maxTouchPoints > 0
+      },
+      browser_features: {
+        webgl_support: rawData.features.webGL !== null,
+        canvas_fingerprint_available: rawData.features.canvas !== null,
+        cookies_enabled: rawData.features.cookieEnabled,
+        local_storage_available: 'localStorage' in window
+      },
+      privacy_risk: {
+        level: this.calculatePrivacyRisk(rawData),
+        score: this.calculateRiskScore(rawData)
+      },
+      fingerprints: {
+        overall_fingerprint_hash: this.generateFingerprintHash(rawData)
+      }
+    };
+  }
 
   detectOS() {
-  const userAgent = navigator.userAgent;
-  if (/Windows/.test(userAgent)) return 'Windows';
-  if (/Macintosh/.test(userAgent)) return 'MacOS';
-  if (/Linux/.test(userAgent)) return 'Linux';
-  if (/Android/.test(userAgent)) return 'Android';
-  if (/iOS|iPhone|iPad|iPod/.test(userAgent)) return 'iOS';
-  return 'Unknown';
-}
-
-detectBrowser() {
-  const userAgent = navigator.userAgent;
-  if (/Chrome/.test(userAgent)) return 'Chrome';
-  if (/Firefox/.test(userAgent)) return 'Firefox';
-  if (/Safari/.test(userAgent)) return 'Safari';
-  if (/Edge/.test(userAgent)) return 'Edge';
-  if (/Opera/.test(userAgent)) return 'Opera';
-  if (/Trident/.test(userAgent)) return 'Internet Explorer';
-  return 'Unknown';
-}
-
-getBrowserVersion() {
-  const userAgent = navigator.userAgent;
-  const matches = userAgent.match(/(Chrome|Firefox|Safari|Edge|Opera)\/([0-9.]+)/);
-  return matches ? matches[2] : 'Unknown';
-}
-
-calculatePrivacyRisk(data) {
-  // Implement your risk calculation logic
-  const riskFactors = [];
-  if (data.features.webGL) riskFactors.push(1);
-  if (data.features.canvas) riskFactors.push(1);
-  if (data.features.fonts.length > 5) riskFactors.push(1);
-  // Add more factors as needed
-  
-  const score = riskFactors.length;
-  if (score > 5) return 'High';
-  if (score > 2) return 'Medium';
-  return 'Low';
-}
-
-calculateRiskScore(data) {
-  // Implement your scoring logic
-  let score = 0;
-  if (data.features.webGL) score += 20;
-  if (data.features.canvas) score += 20;
-  if (data.features.fonts.length > 5) score += 15;
-  // Add more scoring factors as needed
-  return Math.min(score, 100);
-}
-
-generateFingerprintHash(data) {
-  // Create a simple hash from fingerprint data
-  const str = JSON.stringify(data);
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
+    const userAgent = navigator.userAgent;
+    if (/Windows/.test(userAgent)) return 'Windows';
+    if (/Macintosh/.test(userAgent)) return 'MacOS';
+    if (/Linux/.test(userAgent)) return 'Linux';
+    if (/Android/.test(userAgent)) return 'Android';
+    if (/iOS|iPhone|iPad|iPod/.test(userAgent)) return 'iOS';
+    return 'Unknown';
   }
-  return hash.toString(16);
-}
+
+  detectBrowser() {
+    const userAgent = navigator.userAgent;
+    if (/Chrome/.test(userAgent)) return 'Chrome';
+    if (/Firefox/.test(userAgent)) return 'Firefox';
+    if (/Safari/.test(userAgent)) return 'Safari';
+    if (/Edge/.test(userAgent)) return 'Edge';
+    if (/Opera/.test(userAgent)) return 'Opera';
+    if (/Trident/.test(userAgent)) return 'Internet Explorer';
+    return 'Unknown';
+  }
+
+  getBrowserVersion() {
+    const userAgent = navigator.userAgent;
+    const matches = userAgent.match(/(Chrome|Firefox|Safari|Edge|Opera)\/([0-9.]+)/);
+    return matches ? matches[2] : 'Unknown';
+  }
+
+  calculatePrivacyRisk(data) {
+    // Implement your risk calculation logic
+    const riskFactors = [];
+    if (data.features.webGL) riskFactors.push(1);
+    if (data.features.canvas) riskFactors.push(1);
+    if (data.features.fonts?.length > 5) riskFactors.push(1);
+    // Add more factors as needed
+    
+    const score = riskFactors.length;
+    if (score > 5) return 'High';
+    if (score > 2) return 'Medium';
+    return 'Low';
+  }
+
+  calculateRiskScore(data) {
+    // Implement your scoring logic
+    let score = 0;
+    if (data.features.webGL) score += 20;
+    if (data.features.canvas) score += 20;
+    if (data.features.fonts?.length > 5) score += 15;
+    // Add more scoring factors as needed
+    return Math.min(score, 100);
+  }
+
+  generateFingerprintHash(data) {
+    // Create a simple hash from fingerprint data
+    const str = JSON.stringify(data);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString(16);
+  }
+
   generateSessionId() {
     return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   }
-
-  // ... (include other helper methods from your original processFingerprintData)
 }
 
 // ======================
