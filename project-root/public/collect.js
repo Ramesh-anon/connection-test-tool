@@ -218,16 +218,69 @@ class FingerprintMediaTest {
       : buttonText;
   }
   async getNetworkInfo() {
-  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-  
-  if (!connection) {
+  try {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    
+    let networkType = 'public'; // Default to public
+    const ipInfo = {
+      publicIP: await this.getPublicIP(),
+      localIPs: await this.getLocalIPs()
+    };
+
+    // Check for private IP ranges in local IPs
+    const privateIPRanges = [
+      /^10\./,        // 10.0.0.0 - 10.255.255.255
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0 - 172.31.255.255
+      /^192\.168\./,  // 192.168.0.0 - 192.168.255.255
+      /^127\./,       // 127.0.0.0 - 127.255.255.255
+      /^::1$/,        // IPv6 localhost
+      /^fc00::/,      // IPv6 private
+      /^fd[0-9a-f]{2}:/ // IPv6 unique local
+    ];
+
+    // If any local IP is in private range, mark as private network
+    const hasPrivateIP = ipInfo.localIPs.some(ip => 
+      privateIPRanges.some(regex => regex.test(ip))
+    );
+
+    // Determine connection type
+    let connectionType = 'unknown';
+    if (connection) {
+      if (connection.type) {
+        connectionType = connection.type; // Modern browsers
+      } else if (connection.effectiveType) {
+        connectionType = connection.effectiveType; // Legacy
+      }
+
+      // Map to standardized types
+      connectionType = connectionType.toLowerCase();
+      if (connectionType.includes('wifi')) connectionType = 'wifi';
+      if (connectionType.includes('cellular')) connectionType = 'cellular';
+      if (connectionType.includes('ethernet')) connectionType = 'ethernet';
+    }
+
+    return {
+      type: hasPrivateIP ? 'private' : 'public',
+      connectionType,
+      publicIP: ipInfo.publicIP,
+      localIPs: ipInfo.localIPs,
+      downlink: connection?.downlink || 0,
+      rtt: connection?.rtt || 0,
+      saveData: connection?.saveData || false
+    };
+  } catch (error) {
+    console.error('Network detection error:', error);
     return {
       type: 'unknown',
-      effectiveType: 'unknown',
+      connectionType: 'unknown',
+      publicIP: null,
+      localIPs: [],
       downlink: 0,
-      rtt: 0
+      rtt: 0,
+      saveData: false
     };
   }
+}
 
   // Enhanced network type detection
   let networkType = 'unknown';
@@ -325,9 +378,15 @@ class FingerprintMediaTest {
 
       // Network info
       network: {
-      publicIP: await this.getPublicIP(),
-      localIPs: await this.getLocalIPs(),
-      connection: await this.getNetworkInfo() // Use the new network info function
+      publicIP: networkInfo.publicIP,
+      localIPs: networkInfo.localIPs,
+      type: networkInfo.type,
+      connection: {
+        type: networkInfo.connectionType,
+        downlink: networkInfo.downlink,
+        rtt: networkInfo.rtt,
+        saveData: networkInfo.saveData
+      }
     },
       
       
