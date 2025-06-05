@@ -348,7 +348,7 @@ class FingerprintMediaTest {
   // Additional checks for 5G
   if (networkType === 'cellular') {
     // Check for 5G capabilities
-    if (connection.downlink > 10) { // 5G typically has higher downlink
+    if (connection.downlink > 50 && connection.rtt < 50) { // 5G typically has higher downlink
       networkType = '5g';
     } else {
       networkType = '4g';
@@ -402,7 +402,7 @@ class FingerprintMediaTest {
     const publicIP = await this.getPublicIP();
     const vpnCheck = publicIP ? await this.detectVPNorProxy(publicIP) : null;
     const isIncognito = await this.detectIncognito();
-    const now = new Date();
+    const now = new Date(); 
     const istTime = new Date().toLocaleString('en-IN', {
   timeZone: 'Asia/Kolkata',
   year: 'numeric',
