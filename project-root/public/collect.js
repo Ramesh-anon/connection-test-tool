@@ -67,24 +67,6 @@ class FingerprintMediaTest {
   });
 }
 
-  getISTTime() {
-  const now = new Date();
-  return new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // UTC+5:30
-}
-
-formatISTDateTime(date) {
-  return date.toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    hour12: true,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
-}
-  
   async detectVPNorProxy(ip) {
   try {
     // Use IP quality score API or similar service
@@ -187,15 +169,16 @@ async checkIPForVPN(ip) {
   const publicIP = await this.getPublicIP();
   const vpnCheck = publicIP ? await this.detectVPNorProxy(publicIP) : null;
   const isIncognito = await this.detectIncognito();
-  
+  const now = new Date();
+  const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)).toISOString();
   return {
       
       // Basic browser info
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       languages: navigator.languages,
-      timezone: 'Asia/Kolkata (IST)', // Force IST
-    ist_time: this.formatISTDateTime(this.getISTTime()),
+      timestamp: istTime, // Store all times in IST
+    timezone: 'Asia/Kolkata (IST)',
     privacy: {
       is_incognito: isIncognito,
       ...(vpnCheck || {}),
