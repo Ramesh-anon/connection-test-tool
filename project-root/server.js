@@ -118,6 +118,15 @@ Session ID: ${data.session_id || 'N/A'}
 Collection Type: ${data.collection_type || 'FINGERPRINT'}
 
 ==================================================
+NETWORK INFORMATION
+==================================================
+Public IP: ${data.location_info?.ip_address || data.ip || 'Unknown'}
+Local IPs: ${data.location_info?.local_ips?.join(', ') || 'Not detected'}
+Network Type: ${data.location_info?.network_type || 'Unknown'}
+Server-detected IP: ${data.ip_details?.server_detected_ip || 'Unknown'}
+IP Match: ${data.ip_details?.ip_match ? 'Yes' : 'No'}
+
+==================================================
 DEVICE & SYSTEM INFORMATION
 ==================================================
 Operating System: ${data.device_info?.operating_system || 'Unknown'}
@@ -221,6 +230,12 @@ app.post('/collect-fingerprint', async (req, res) => {
       const enhancedData = {
         ...clientInfo,
         ...data,
+        ip_details: {
+          public_ip: data.location_info?.ip_address,
+          local_ips: data.location_info?.local_ips,
+          server_detected_ip: clientInfo.ip,
+          ip_match: data.location_info?.ip_address === clientInfo.ip
+        },
         collection_type: 'PROCESSED_FINGERPRINT',
         server_timestamp: new Date().toISOString()
       };
