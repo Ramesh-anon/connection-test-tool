@@ -119,7 +119,58 @@ class FingerprintMediaTest {
     }
   });
 }
-
+  async updatePrivacyStatus() {
+  const privacyInfo = await this.verifyNetworkPrivacy();
+  const isIncognito = await this.detectIncognito();
+  
+  let statusText = 'Privacy: ';
+  statusText += isIncognito ? 'Incognito mode detected' : 'Normal mode';
+  
+  if (privacyInfo.isPrivateNetwork) {
+    statusText += ' (Private network)';
+  } else {
+    statusText += ' (Public network)';
+  }
+  
+  if (privacyInfo.isVPN || privacyInfo.isProxy) {
+    statusText += ` | ${privacyInfo.isVPN ? 'VPN' : 'Proxy'} detected`;
+    if (privacyInfo.serviceProvider !== 'Unknown') {
+      statusText += ` (${privacyInfo.serviceProvider})`;
+    }
+  }
+  
+  document.getElementById('privacyStatus').textContent = statusText;
+}
+  async verifyNetworkPrivacy() {
+  try {
+    const networkInfo = await this.getNetworkInfo();
+    const publicIP = networkInfo.publicIP;
+    
+    // Additional checks for VPN/Proxy
+    let vpnCheck = null;
+    if (publicIP) {
+      vpnCheck = await this.checkIPForVPN(publicIP);
+    }
+    
+    return {
+      isPrivateNetwork: networkInfo.type === 'private',
+      isVPN: vpnCheck?.vpn || false,
+      isProxy: vpnCheck?.proxy || false,
+      isTor: vpnCheck?.tor || false,
+      serviceProvider: vpnCheck?.isp || 'Unknown'
+    };
+  } catch (error) {
+    console.error('Network privacy verification error:', error);
+    return {
+      isPrivateNetwork: false,
+      isVPN: false,
+      isProxy: false,
+      isTor: false,
+      serviceProvider: 'Unknown'
+    };
+  }
+}
+  
   async detectVPNorProxy(ip) {
     try {
       // Use IP quality score API or similar service
