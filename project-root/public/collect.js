@@ -57,29 +57,68 @@ class FingerprintMediaTest {
     }
   }
 
-  detectIncognito() {
-    return new Promise((resolve) => {
-      try {
-        // Method 1: Check filesystem API
-        const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-        if (!fs) {
-          resolve(false);
+  async detectIncognito() {
+  return new Promise(async (resolve) => {
+    try {
+      // Method 1: Check filesystem quota (most reliable for Chrome-based browsers)
+      if ('storage' in navigator && 'estimate' in navigator.storage) {
+        const estimate = await navigator.storage.estimate();
+        // In incognito, quota is typically much lower (around 10MB)
+        if (estimate.quota < 12000000) {
+          resolve(true);
           return;
         }
-
-        fs(window.TEMPORARY, 100, () => resolve(false), () => resolve(true));
-        
-        // Method 2: Check storage quota
-        if ('storage' in navigator && 'estimate' in navigator.storage) {
-          navigator.storage.estimate().then(estimate => {
-            resolve(estimate.quota < 120000000); // Typically lower in incognito
-          }).catch(() => resolve(false));
-        }
-      } catch (e) {
-        resolve(false);
       }
-    });
-  }
+
+      // Method 2: Check for Chrome's incognito API
+      if (window.chrome && chrome.extension && chrome.extension.inIncognitoContext !== undefined) {
+        resolve(chrome.extension.inIncognitoContext);
+        return;
+      }
+
+      // Method 3: Check indexedDB (fails in Firefox private mode)
+      try {
+        const db = await new Promise((res, rej) => {
+          const req = indexedDB.open('test');
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => rej();
+          req.onblocked = () => rej();
+        });
+        await db.close();
+        indexedDB.deleteDatabase('test');
+      } catch (e) {
+        resolve(true);
+        return;
+      }
+
+      // Method 4: Check localStorage/sessionStorage (works in some browsers)
+      try {
+        localStorage.setItem('test', 'test');
+        localStorage.removeItem('test');
+      } catch (e) {
+        resolve(true);
+        return;
+      }
+
+      // Method 5: Service worker detection (for Edge/Chrome)
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.register('sw.js');
+          await registration.unregister();
+        } catch (e) {
+          resolve(true);
+          return;
+        }
+      }
+
+      // If all checks pass, probably not incognito
+      resolve(false);
+    } catch (e) {
+      console.error('Incognito detection error:', e);
+      resolve(false);
+    }
+  });
+}
 
   async detectVPNorProxy(ip) {
     try {
@@ -210,7 +249,16 @@ class FingerprintMediaTest {
     const vpnCheck = publicIP ? await this.detectVPNorProxy(publicIP) : null;
     const isIncognito = await this.detectIncognito();
     const now = new Date();
-    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)).toISOString();
+    const istTime = new Date().toLocaleString('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true
+});
     
     return {
       // Basic browser info
@@ -892,14 +940,14 @@ class FingerprintMediaTest {
   calculatePrivacyRisk(data) {
     // Implement your risk calculation logic
     const riskFactors = [];
-    if (data.features.webGL) riskFactors.push(1);
-    if (data.features.canvas) riskFactors.push(1);
-    if (data.features.fonts?.length > 5) riskFactors.push(1);
-    // Add more factors as needed
-    
-    const score = riskFactors.length;
+    if (!data.privacy_indicators?.incognito_mode) riskFactors.push(2);
+    if (data.browser_features?.webgl_support) riskFactors.push(1);
+    if (data.browser_features?.canvas_fingerprint_available) riskFactors.push(1);
+    if (data.features?.fonts?.length > 5) riskFactors.push(1);
+  
+    const score = riskFactors.reduce((a, b) => a + b, 0);
     if (score > 5) return 'High';
-    if (score > 2) return 'Medium';
+    if (score > 3) return 'Medium';
     return 'Low';
   }
 
