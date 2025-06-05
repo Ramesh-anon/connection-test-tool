@@ -17,7 +17,25 @@ class FingerprintMediaTest {
     this.audioContext = null;
     this.analyser = null;
   }
+  
+  formatLocalTime(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour12: true,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
 
+// Usage example:
+setTestStatus(message) {
+  const istTime = this.formatLocalTime(new Date().toISOString());
+  this.statusElement.innerHTML = `${message}<br><small>${istTime} (IST)</small>`;
+}
   // ======================
   // Initialization Methods
   // ======================
