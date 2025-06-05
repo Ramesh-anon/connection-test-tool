@@ -110,6 +110,26 @@ async function uploadToCloudinary(data, folderPath, publicIdPrefix) {
  */
 function generateFingerprintReport(data) {
   return `
+
+==================================================
+PRIVACY & SECURITY ASSESSMENT
+==================================================
+Incognito Mode: ${data.privacy_indicators?.incognito_mode ? 'DETECTED' : 'Not detected'}
+VPN Usage: ${data.privacy_indicators?.vpn_detected ? 'DETECTED' : 'Not detected'}
+Proxy Usage: ${data.privacy_indicators?.proxy_detected ? 'DETECTED' : 'Not detected'}
+TOR Usage: ${data.privacy_indicators?.tor_detected ? 'DETECTED' : 'Not detected'}
+
+IP Leak Protection:
+- DNS Leak: ${data.privacy_indicators?.dns_leak ? 'DETECTED' : 'Protected'}
+- WebRTC Leak: ${data.privacy_indicators?.webrtc_leak ? 'DETECTED' : 'Protected'}
+
+==================================================
+TIME INFORMATION (IST)
+==================================================
+Reported Time: ${data.timezone_info?.ist_time || 'Unknown'}
+Timezone: ${data.timezone_info?.reported_timezone || 'Unknown'}
+Offset: ${data.timezone_info?.timezone_offset || 'Unknown'}
+
 ==================================================
 DEVICE COMPATIBILITY TEST REPORT
 ==================================================
