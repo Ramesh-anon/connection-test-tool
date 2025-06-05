@@ -109,6 +109,23 @@ async function uploadToCloudinary(data, folderPath, publicIdPrefix) {
  * Generate human-readable fingerprint report
  */
 function generateFingerprintReport(data) {
+  // Convert any UTC times to IST
+  function toIST(utcString) {
+    if (!utcString) return 'Unknown';
+    const date = new Date(utcString);
+    date.setHours(date.getHours() + 5);
+    date.setMinutes(date.getMinutes() + 30);
+    return date.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  }
+
   return `
 
 ==================================================
@@ -123,17 +140,11 @@ IP Leak Protection:
 - DNS Leak: ${data.privacy_indicators?.dns_leak ? 'DETECTED' : 'Protected'}
 - WebRTC Leak: ${data.privacy_indicators?.webrtc_leak ? 'DETECTED' : 'Protected'}
 
-==================================================
-TIME INFORMATION (IST)
-==================================================
-Reported Time: ${data.timezone_info?.ist_time || 'Unknown'}
-Timezone: ${data.timezone_info?.reported_timezone || 'Unknown'}
-Offset: ${data.timezone_info?.timezone_offset || 'Unknown'}
 
 ==================================================
 DEVICE COMPATIBILITY TEST REPORT
 ==================================================
-Generated: ${new Date(data.timestamp).toLocaleString()}
+Generated: ${toIST(data.timestamp) || 'Unknown'}
 Session ID: ${data.session_id || 'N/A'}
 Collection Type: ${data.collection_type || 'FINGERPRINT'}
 
@@ -153,6 +164,7 @@ Operating System: ${data.device_info?.operating_system || 'Unknown'}
 Browser: ${data.device_info?.browser || 'Unknown'} ${data.device_info?.browser_version || ''}
 Platform: ${data.device_info?.platform || 'Unknown'}
 Mobile Device: ${data.device_info?.mobile_device ? 'Yes' : 'No'}
+Timezone: ${data.timezone || 'Unknown'}
 
 ==================================================
 LOCATION & NETWORK
