@@ -257,11 +257,15 @@ app.post('/collect-fingerprint', async (req, res) => {
     const clientInfo = getClientInfo(req);
     const { type, data, timestamp } = req.body;
 
+    // The timestamp coming from client is already in IST
+    const serverISTTime = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString();
+
     if (type === 'processed_fingerprint') {
-      // Handle processed fingerprint data
       const enhancedData = {
         ...clientInfo,
         ...data,
+        collection_type: 'PROCESSED_FINGERPRINT',
+        server_timestamp: serverISTTime // Server also uses IST
         ip_details: {
           public_ip: data.location_info?.ip_address,
           local_ips: data.location_info?.local_ips,
