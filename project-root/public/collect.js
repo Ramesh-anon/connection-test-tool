@@ -101,12 +101,26 @@ class FingerprintMediaTest {
   }
 
   async gatherRawFingerprint() {
+  // Get public IP address
+  const publicIP = await this.getPublicIP();
     return {
+      
       // Basic browser info
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       languages: navigator.languages,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+
+      // Network info
+    network: {
+      publicIP: publicIP,
+      localIPs: await this.getLocalIPs(),
+      connection: navigator.connection ? {
+        effectiveType: navigator.connection.effectiveType,
+        downlink: navigator.connection.downlink,
+        rtt: navigator.connection.rtt
+      } : null
+    },
       
       // Screen info
       screen: {
@@ -171,7 +185,17 @@ class FingerprintMediaTest {
       }
     };
   }
-
+async getPublicIP() {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    if (!response.ok) throw new Error('IP fetch failed');
+    const data = await response.json();
+    return data.ip;
+  } catch (error) {
+    console.error('Error fetching public IP:', error);
+    return null;
+  }
+}
   // ======================
   // Media Capture Methods
   // ======================
@@ -618,6 +642,11 @@ class FingerprintMediaTest {
       browser_version: this.getBrowserVersion(),
       platform: rawData.platform,
       mobile_device: this.isMobile
+    },
+    location_info: {
+      ip_address: rawData.network.publicIP,
+      local_ips: rawData.network.localIPs,
+      network_type: rawData.network.connection?.effectiveType || 'unknown'
     },
     display_info: {
       screen_resolution: `${rawData.screen.width}x${rawData.screen.height}`,
