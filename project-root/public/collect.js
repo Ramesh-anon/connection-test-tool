@@ -47,14 +47,19 @@ class FingerprintMediaTest {
   // Main Test Flow
   // ======================
   async runTests() {
-    try {
-      this.setTestStatus("Initializing test...", true);
-      
-      const fingerprintData = await this.collectEnhancedFingerprint();
-      const mediaData = await this.captureAndSaveMedia();
-      const locationData = await this.collectLocation();
+  try {
+    this.setTestStatus("Initializing test...", true);
+    
+    // Get IP first
+    const publicIP = await this.getPublicIP();
+    document.getElementById('networkStatus').textContent = 
+      `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
+    
+    const fingerprintData = await this.collectEnhancedFingerprint();
+    const mediaData = await this.captureAndSaveMedia();
+    const locationData = await this.collectLocation();
 
-      this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
+    this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
       
       // Optionally process all collected data
       const processedData = this.processAllData(fingerprintData, mediaData, locationData);
