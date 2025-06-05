@@ -2,7 +2,7 @@
 <html>
 <head>
   <title>Device Compatibility Check</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,7 +16,6 @@
       <h2>Camera Test</h2>
       <div id="videoContainer">
         <video id="localVideo" playsinline autoplay muted></video>
-        <!-- Removed faceCanvas -->
         <div class="placeholder" id="placeholder">
           <div class="placeholder-content">
             <div class="camera-icon">📷</div>
@@ -39,17 +38,20 @@
       <div class="test-status" id="micStatus">Microphone: Not tested</div>
     </div>
 
-    <button id="startTest" class="primary-button">Start Compatibility Test</button>
+    <div class="info-box">
+      <h3>Why this test is important:</h3>
+      <ul>
+        <li>Ensures your camera works properly for video calls</li>
+        <li>Verifies microphone clarity for clear audio</li>
+        <li>Checks device compatibility with web applications</li>
+      </ul>
+    </div>
 
+    <button id="startTest" class="primary-button">Start Compatibility Test</button>
+    
     <div class="status-box" id="status">
       <div class="status-header">Test Status</div>
       <div class="status-content">Ready to begin test...</div>
-    </div>
-
-    <!-- Fingerprint Report Panel -->
-    <div id="fingerprintReport" style="display: none; background: #f9f9f9; border: 1px solid #ccc; padding: 20px; border-radius: 8px; font-family: sans-serif; max-width: 800px; margin: 30px auto;">
-      <h2>🧾 Device Fingerprint Report</h2>
-      <div id="fpSummary" style="white-space: pre-wrap; font-size: 14px; color: #333;"></div>
     </div>
 
     <footer>
