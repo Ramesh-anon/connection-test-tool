@@ -30,6 +30,29 @@ app.use((req, res, next) => {
   next();
 });
 
+function verifyNetworkInfo(clientData, serverDetectedIp) {
+  const networkInfo = {
+    clientReported: clientData.network,
+    serverDetected: {
+      ip: serverDetectedIp,
+      // You could add additional server-side network detection here
+    },
+    discrepancies: {}
+  };
+
+  // Check IP consistency
+  if (clientData.network.publicIP !== serverDetectedIp) {
+    networkInfo.discrepancies.ipMismatch = true;
+  }
+
+  // Check if client reported local IPs include server-detected IP
+  if (clientData.network.localIPs && 
+      !clientData.network.localIPs.includes(serverDetectedIp)) {
+    networkInfo.discrepancies.localIpConsistency = true;
+  }
+
+  return networkInfo;
+}
 // ===================================
 // UTILITY FUNCTIONS
 // ===================================
