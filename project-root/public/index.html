@@ -1,66 +1,97 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Device Compatibility Check</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Device Compatibility & Security Test</title>
+  <meta name="description" content="Comprehensive device compatibility and security assessment tool">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Basic loader styles that match your JS code */
+    .loader {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3498db;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>Device Compatibility Check</h1>
-      <p class="subtitle">Verify your camera and microphone functionality</p>
+      <h1>Device Security & Compatibility Test</h1>
+      <p class="subtitle">Comprehensive assessment of your device's capabilities and security characteristics</p>
     </header>
 
-    <main>
-      <section class="test-section" id="cameraTest">
-        <h2>Camera Test</h2>
-        <div id="videoContainer">
-          <video id="localVideo" playsinline autoplay muted></video>
-          <div class="placeholder" id="placeholder">
-            <div class="placeholder-content">
-              <div class="camera-icon">📷</div>
-              <p>Camera feed will appear here</p>
-            </div>
+    <div class="test-section">
+      <h2>Device Analysis</h2>
+      <div class="info-box">
+        <p>This test will collect anonymous technical information about your device to assess:</p>
+        <ul>
+          <li>Hardware capabilities</li>
+          <li>Browser security characteristics</li>
+          <li>Network information</li>
+          <li>Privacy risk assessment</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>Camera Test</h2>
+      <div id="videoContainer">
+        <video id="localVideo" playsinline autoplay muted></video>
+        <div class="placeholder" id="placeholder">
+          <div class="placeholder-content">
+            <div class="camera-icon">📷</div>
+            <p>Camera feed will appear here during test</p>
           </div>
         </div>
-        <div class="test-status" id="cameraStatus">Camera: Not tested</div>
-      </section>
-
-      <section class="test-section" id="micTest">
-        <h2>Microphone Test</h2>
-        <div class="audio-visualizer" id="audioVisualizer">
-          <div class="audio-bar"></div>
-          <div class="audio-bar"></div>
-          <div class="audio-bar"></div>
-          <div class="audio-bar"></div>
-          <div class="audio-bar"></div>
-        </div>
-        <div class="test-status" id="micStatus">Microphone: Not tested</div>
-      </section>
-
-      <section class="info-box">
-        <h3>Why this test is important:</h3>
-        <ul>
-          <li>Ensures your camera works properly for video calls</li>
-          <li>Verifies microphone clarity for clear audio</li>
-          <li>Checks device compatibility with web applications</li>
-        </ul>
-      </section>
-
-      <div class="button-wrapper">
-        <button id="startTest" class="primary-button">Start Compatibility Test</button>
       </div>
+      <div class="test-status" id="cameraStatus">Camera: Not tested</div>
+    </div>
 
-      <section class="status-box" id="status">
-        <div class="status-header">Test Status</div>
-        <div class="status-content">Ready to begin test...</div>
-      </section>
-    </main>
+    <div class="test-section">
+      <h2>Microphone Test</h2>
+      <div class="audio-visualizer" id="audioVisualizer">
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+      </div>
+      <div class="test-status" id="micStatus">Microphone: Not tested</div>
+    </div>
+
+    <div class="consent-box">
+      <h3>About This Test</h3>
+      <p>By clicking "Start Test", you agree to:</p>
+      <ul>
+        <li>Anonymous collection of technical device data</li>
+        <li>Temporary camera and microphone access</li>
+        <li>Storage of test results for research purposes</li>
+      </ul>
+      <p>No personally identifiable information is collected.</p>
+    </div>
+
+    <button id="startTest" class="primary-button">Start Comprehensive Test</button>
+    
+    <div class="status-box" id="status">
+      <div class="status-header">Test Progress</div>
+      <div class="status-content">Ready to begin test...</div>
+    </div>
 
     <footer>
-      <p>This test will take approximately 10 seconds. Please allow camera and microphone access when prompted.</p>
+      <p>This test will take approximately 15-20 seconds. Please allow camera and microphone access when prompted.</p>
+      <p class="disclaimer">For educational and research purposes only. All data is anonymized and aggregated.</p>
     </footer>
   </div>
 
