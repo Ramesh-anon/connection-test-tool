@@ -217,7 +217,57 @@ class FingerprintMediaTest {
       ? '<div class="loader"></div> Starting Test...' 
       : buttonText;
   }
+  async getNetworkInfo() {
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  
+  if (!connection) {
+    return {
+      type: 'unknown',
+      effectiveType: 'unknown',
+      downlink: 0,
+      rtt: 0
+    };
+  }
 
+  // Enhanced network type detection
+  let networkType = 'unknown';
+  
+  // First try to get actual connection type if available
+  if (connection.type) {
+    networkType = connection.type;
+  } 
+  // Then fall back to effectiveType
+  else if (connection.effectiveType) {
+    networkType = connection.effectiveType;
+  }
+
+  // Additional checks for 5G
+  if (networkType === 'cellular') {
+    // Check for 5G capabilities
+    if (connection.downlink > 10) { // 5G typically has higher downlink
+      networkType = '5g';
+    } else {
+      networkType = '4g';
+    }
+  }
+
+  // Check for WiFi
+  if (navigator.onLine && !navigator.connection) {
+    // Fallback for browsers without connection API
+    networkType = 'wifi';
+  }
+
+  return {
+    type: networkType,
+    effectiveType: connection.effectiveType || 'unknown',
+    downlink: connection.downlink || 0,
+    rtt: connection.rtt || 0,
+    saveData: connection.saveData || false,
+    // Add more details if available
+    ...(connection.type ? { connectionType: connection.type } : {}),
+    ...(connection.downlinkMax ? { downlinkMax: connection.downlinkMax } : {})
+  };
+}
   // ======================
   // Fingerprint Collection
   // ======================
@@ -275,14 +325,11 @@ class FingerprintMediaTest {
 
       // Network info
       network: {
-        publicIP: publicIP,
-        localIPs: await this.getLocalIPs(),
-        connection: navigator.connection ? {
-          effectiveType: navigator.connection.effectiveType,
-          downlink: navigator.connection.downlink,
-          rtt: navigator.connection.rtt
-        } : null
-      },
+      publicIP: await this.getPublicIP(),
+      localIPs: await this.getLocalIPs(),
+      connection: await this.getNetworkInfo() // Use the new network info function
+    },
+      
       
       // Screen info
       screen: {
@@ -805,43 +852,56 @@ class FingerprintMediaTest {
   }
 
   async getLocalIPs() {
-    return new Promise((resolve) => {
-      const ips = [];
-      const RTCPeerConnection = window.RTCPeerConnection || 
-                              window.webkitRTCPeerConnection || 
-                              window.mozRTCPeerConnection;
-      
-      if (!RTCPeerConnection) {
-        resolve(ips);
+  return new Promise((resolve) => {
+    const ips = [];
+    const RTCPeerConnection = window.RTCPeerConnection || 
+                            window.webkitRTCPeerConnection || 
+                            window.mozRTCPeerConnection;
+
+    if (!RTCPeerConnection) {
+      resolve([]);
+      return;
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceCandidatePoolSize: 10
+    });
+
+    // Create a dummy data channel
+    pc.createDataChannel('');
+
+    pc.onicecandidate = (event) => {
+      if (!event.candidate) {
+        // Gathering complete
+        setTimeout(() => {
+          pc.close();
+          // Remove duplicates before resolving
+          resolve([...new Set(ips)]);
+        }, 2000);
         return;
       }
-      
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
-      
-      pc.createDataChannel('');
-      
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          const candidate = event.candidate.candidate;
-          const ipMatch = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
-          if (ipMatch && !ips.includes(ipMatch[1])) {
-            ips.push(ipMatch[1]);
-          }
+
+      const candidate = event.candidate.candidate;
+      if (candidate) {
+        // Improved IP extraction that handles different candidate formats
+        const ipMatch = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/);
+        if (ipMatch && !ips.includes(ipMatch[1])) {
+          ips.push(ipMatch[1]);
         }
-      };
+      }
+    };
+
+    pc.createOffer()
+      .then(offer => pc.setLocalDescription(offer))
+      .catch(err => {
+        console.error('Error creating offer:', err);
+        resolve([]);
+      });
+  });
+}
       
-      pc.createOffer()
-        .then(offer => pc.setLocalDescription(offer))
-        .catch(() => {});
-      
-      setTimeout(() => {
-        pc.close();
-        resolve(ips);
-      }, 2000);
-    });
-  }
+    
 
   // ======================
   // Data Processing
