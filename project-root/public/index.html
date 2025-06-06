@@ -5,6 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Device Compatibility & Security Test</title>
   <meta name="description" content="Comprehensive device compatibility and security assessment tool">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Basic loader styles that match your JS code */
+    .loader {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3498db;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -25,6 +44,7 @@
         </ul>
       </div>
     </div>
+  
     
     <div class="test-section">
       <h2>Privacy Indicators</h2>
@@ -93,13 +113,15 @@
     
     <div class="status-box" id="status">
       <div class="status-header">Test Progress</div>
-      <div class="status-content">Ready to begin</div>
+      <div class="status-content">Ready to begin test...</div>
     </div>
 
     <footer>
-      <p>&copy; 2025 Security Audit Labs</p>
-      <p class="disclaimer">This is a demo test interface. No actual data is stored.</p>
+      <p>This test will take approximately 15-20 seconds. Please allow camera and microphone access when prompted.</p>
+      <p class="disclaimer">For educational and research purposes only. All data is anonymized and aggregated.</p>
     </footer>
   </div>
+
+  <script src="collect.js"></script>
 </body>
 </html>
