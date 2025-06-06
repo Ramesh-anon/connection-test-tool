@@ -293,10 +293,10 @@ class FingerprintMediaTest {
 
       // If any local IP is in private range, mark as private network
       const hasPrivateIP = ipInfo.localIPs.some(ip => 
-        privateIPRanges.some(regex => regex.test(ip))
+        privateIPRanges.some(regex => regex.test(ip)))
         ? 'private'
         : 'public';
-
+  
       // Determine connection type
       let connectionType = 'unknown';
       if (connection) {
