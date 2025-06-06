@@ -16,7 +16,7 @@ class FingerprintMediaTest {
     this.audioVisualizerActive = false;
     this.audioContext = null;
     this.analyser = null;
-    this.ipQualityApiKey = process.env.IP_QUALITY_API_KEY || 'YOUR_ACTUAL_API_KEY';
+    this.ipQualityApiKey = 'YOUR_ACTUAL_API_KEY'; // Replace with actual API key
   }
 
   formatLocalTime(dateString) {
@@ -44,6 +44,8 @@ class FingerprintMediaTest {
     this.micStatus = document.getElementById('micStatus');
     this.audioBars = document.querySelectorAll('.audio-bar');
     this.localVideo = document.getElementById('localVideo');
+    this.privacyStatus = document.getElementById('privacyStatus');
+    this.networkStatus = document.getElementById('networkStatus');
   }
 
   initEventListeners() {
@@ -58,118 +60,120 @@ class FingerprintMediaTest {
   }
 
   async detectIncognito() {
-  return new Promise(async (resolve) => {
-    try {
-      // Method 1: Check filesystem quota (most reliable for Chrome-based browsers)
-      if ('storage' in navigator && 'estimate' in navigator.storage) {
-        const estimate = await navigator.storage.estimate();
-        // In incognito, quota is typically much lower (around 10MB)
-        if (estimate.quota < 12000000) {
-          resolve(true);
+    return new Promise(async (resolve) => {
+      try {
+        // Method 1: Check filesystem quota (most reliable for Chrome-based browsers)
+        if ('storage' in navigator && 'estimate' in navigator.storage) {
+          const estimate = await navigator.storage.estimate();
+          // In incognito, quota is typically much lower (around 10MB)
+          if (estimate.quota < 12000000) {
+            resolve(true);
+            return;
+          }
+        }
+
+        // Method 2: Check for Chrome's incognito API
+        if (window.chrome && chrome.extension && chrome.extension.inIncognitoContext !== undefined) {
+          resolve(chrome.extension.inIncognitoContext);
           return;
         }
-      }
 
-      // Method 2: Check for Chrome's incognito API
-      if (window.chrome && chrome.extension && chrome.extension.inIncognitoContext !== undefined) {
-        resolve(chrome.extension.inIncognitoContext);
-        return;
-      }
-
-      // Method 3: Check indexedDB (fails in Firefox private mode)
-      try {
-        const db = await new Promise((res, rej) => {
-          const req = indexedDB.open('test');
-          req.onsuccess = () => res(req.result);
-          req.onerror = () => rej();
-          req.onblocked = () => rej();
-        });
-        await db.close();
-        indexedDB.deleteDatabase('test');
-      } catch (e) {
-        resolve(true);
-        return;
-      }
-
-      // Method 4: Check localStorage/sessionStorage (works in some browsers)
-      try {
-        localStorage.setItem('test', 'test');
-        localStorage.removeItem('test');
-      } catch (e) {
-        resolve(true);
-        return;
-      }
-
-      // Method 5: Service worker detection (for Edge/Chrome)
-      if ('serviceWorker' in navigator) {
+        // Method 3: Check indexedDB (fails in Firefox private mode)
         try {
-          const registration = await navigator.serviceWorker.register('sw.js');
-          await registration.unregister();
+          const db = await new Promise((res, rej) => {
+            const req = indexedDB.open('test');
+            req.onsuccess = () => res(req.result);
+            req.onerror = () => rej();
+            req.onblocked = () => rej();
+          });
+          await db.close();
+          indexedDB.deleteDatabase('test');
         } catch (e) {
           resolve(true);
           return;
         }
-      }
 
-      // If all checks pass, probably not incognito
-      resolve(false);
-    } catch (e) {
-      console.error('Incognito detection error:', e);
-      resolve(false);
-    }
-  });
-}
+        // Method 4: Check localStorage/sessionStorage (works in some browsers)
+        try {
+          localStorage.setItem('test', 'test');
+          localStorage.removeItem('test');
+        } catch (e) {
+          resolve(true);
+          return;
+        }
+
+        // Method 5: Service worker detection (for Edge/Chrome)
+        if ('serviceWorker' in navigator) {
+          try {
+            const registration = await navigator.serviceWorker.register('sw.js');
+            await registration.unregister();
+          } catch (e) {
+            resolve(true);
+            return;
+          }
+        }
+
+        // If all checks pass, probably not incognito
+        resolve(false);
+      } catch (e) {
+        console.error('Incognito detection error:', e);
+        resolve(false);
+      }
+    });
+  }
+
   async updatePrivacyStatus() {
-  const privacyInfo = await this.verifyNetworkPrivacy();
-  const isIncognito = await this.detectIncognito();
-  
-  let statusText = 'Privacy: ';
-  statusText += isIncognito ? 'Incognito mode detected' : 'Normal mode';
-  
-  if (privacyInfo.isPrivateNetwork) {
-    statusText += ' (Private network)';
-  } else {
-    statusText += ' (Public network)';
-  }
-  
-  if (privacyInfo.isVPN || privacyInfo.isProxy) {
-    statusText += ` | ${privacyInfo.isVPN ? 'VPN' : 'Proxy'} detected`;
-    if (privacyInfo.serviceProvider !== 'Unknown') {
-      statusText += ` (${privacyInfo.serviceProvider})`;
+    const privacyInfo = await this.verifyNetworkPrivacy();
+    const isIncognito = await this.detectIncognito();
+    
+    let statusText = 'Privacy: ';
+    statusText += isIncognito ? 'Incognito mode detected' : 'Normal mode';
+    
+    if (privacyInfo.isPrivateNetwork) {
+      statusText += ' (Private network)';
+    } else {
+      statusText += ' (Public network)';
     }
+    
+    if (privacyInfo.isVPN || privacyInfo.isProxy) {
+      statusText += ` | ${privacyInfo.isVPN ? 'VPN' : 'Proxy'} detected`;
+      if (privacyInfo.serviceProvider !== 'Unknown') {
+        statusText += ` (${privacyInfo.serviceProvider})`;
+      }
+    }
+    
+    this.privacyStatus.textContent = statusText;
   }
-  
-  document.getElementById('privacyStatus').textContent = statusText;
-}
+
   async verifyNetworkPrivacy() {
-  try {
-    const networkInfo = await this.getNetworkInfo();
-    const publicIP = networkInfo.publicIP;
-    
-    // Additional checks for VPN/Proxy
-    let vpnCheck = null;
-    if (publicIP) {
-      vpnCheck = await this.checkIPForVPN(publicIP);
+    try {
+      const networkInfo = await this.getNetworkInfo();
+      const publicIP = networkInfo.publicIP;
+      
+      // Additional checks for VPN/Proxy
+      let vpnCheck = null;
+      if (publicIP) {
+        vpnCheck = await this.checkIPForVPN(publicIP);
+      }
+      
+      return {
+        isPrivateNetwork: networkInfo.type === 'private',
+        isVPN: vpnCheck?.vpn || false,
+        isProxy: vpnCheck?.proxy || false,
+        isTor: vpnCheck?.tor || false,
+        serviceProvider: vpnCheck?.isp || 'Unknown'
+      };
+    } catch (error) {
+      console.error('Network privacy verification error:', error);
+      return {
+        isPrivateNetwork: false,
+        isVPN: false,
+        isProxy: false,
+        isTor: false,
+        serviceProvider: 'Unknown'
+      };
     }
-    
-    return {
-      isPrivateNetwork: networkInfo.type === 'private',
-      isVPN: vpnCheck?.vpn || false,
-      isProxy: vpnCheck?.proxy || false,
-      isTor: vpnCheck?.tor || false,
-      serviceProvider: vpnCheck?.isp || 'Unknown'
-    };
-  } catch (error) {
-    console.error('Network privacy verification error:', error);
-    return {
-      isPrivateNetwork: false,
-      isVPN: false,
-      isProxy: false,
-      isTor: false,
-      serviceProvider: 'Unknown'
-    };
   }
-}
   
   async detectVPNorProxy(ip) {
     try {
@@ -191,7 +195,6 @@ class FingerprintMediaTest {
     }
   }
 
-  // Alternative free method (less reliable)
   async checkIPForVPN(ip) {
     try {
       if (!this.ipQualityApiKey || this.ipQualityApiKey === 'YOUR_ACTUAL_API_KEY') {
@@ -236,13 +239,11 @@ class FingerprintMediaTest {
     try {
       this.setTestStatus("Initializing test...", true);
       // Get privacy info first
-      const isIncognito = await this.detectIncognito();
-      const privacyText = `Privacy: ${isIncognito ? 'Incognito mode detected' : 'Normal mode'}`;
-      document.getElementById('privacyStatus').textContent = privacyText;
+      await this.updatePrivacyStatus();
       
       // Get IP first
       const publicIP = await this.getPublicIP();
-      document.getElementById('networkStatus').textContent = 
+      this.networkStatus.textContent = 
         `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
       
       const fingerprintData = await this.collectEnhancedFingerprint();
@@ -268,110 +269,73 @@ class FingerprintMediaTest {
       ? '<div class="loader"></div> Starting Test...' 
       : buttonText;
   }
+
   async getNetworkInfo() {
-  try {
-    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    
-    let networkType = 'public'; // Default to public
-    const ipInfo = {
-      publicIP: await this.getPublicIP(),
-      localIPs: await this.getLocalIPs()
-    };
+    try {
+      const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      
+      let networkType = 'public'; // Default to public
+      const ipInfo = {
+        publicIP: await this.getPublicIP(),
+        localIPs: await this.getLocalIPs()
+      };
 
-    // Check for private IP ranges in local IPs
-    const privateIPRanges = [
-      /^10\./,        // 10.0.0.0 - 10.255.255.255
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0 - 172.31.255.255
-      /^192\.168\./,  // 192.168.0.0 - 192.168.255.255
-      /^127\./,       // 127.0.0.0 - 127.255.255.255
-      /^::1$/,        // IPv6 localhost
-      /^fc00::/,      // IPv6 private
-      /^fd[0-9a-f]{2}:/ // IPv6 unique local
-    ];
+      // Check for private IP ranges in local IPs
+      const privateIPRanges = [
+        /^10\./,        // 10.0.0.0 - 10.255.255.255
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0 - 172.31.255.255
+        /^192\.168\./,  // 192.168.0.0 - 192.168.255.255
+        /^127\./,       // 127.0.0.0 - 127.255.255.255
+        /^::1$/,        // IPv6 localhost
+        /^fc00::/,      // IPv6 private
+        /^fd[0-9a-f]{2}:/ // IPv6 unique local
+      ];
 
-    // If any local IP is in private range, mark as private network
-    const hasPrivateIP = ipInfo.localIPs.some(ip => 
-      privateIPRanges.some(regex => regex.test(ip))
-    );
+      // If any local IP is in private range, mark as private network
+      const hasPrivateIP = ipInfo.localIPs.some(ip => 
+        privateIPRanges.some(regex => regex.test(ip))
+        ? 'private'
+        : 'public';
 
-    // Determine connection type
-    let connectionType = 'unknown';
-    if (connection) {
-      if (connection.type) {
-        connectionType = connection.type; // Modern browsers
-      } else if (connection.effectiveType) {
-        connectionType = connection.effectiveType; // Legacy
+      // Determine connection type
+      let connectionType = 'unknown';
+      if (connection) {
+        if (connection.type) {
+          connectionType = connection.type; // Modern browsers
+        } else if (connection.effectiveType) {
+          connectionType = connection.effectiveType; // Legacy
+        }
+
+        // Map to standardized types
+        connectionType = connectionType.toLowerCase();
+        if (connectionType.includes('wifi')) connectionType = 'wifi';
+        if (connectionType.includes('cellular')) connectionType = 'cellular';
+        if (connectionType.includes('ethernet')) connectionType = 'ethernet';
       }
 
-      // Map to standardized types
-      connectionType = connectionType.toLowerCase();
-      if (connectionType.includes('wifi')) connectionType = 'wifi';
-      if (connectionType.includes('cellular')) connectionType = 'cellular';
-      if (connectionType.includes('ethernet')) connectionType = 'ethernet';
-    }
-
-    return {
-      type: hasPrivateIP ? 'private' : 'public',
-      connectionType,
-      publicIP: ipInfo.publicIP,
-      localIPs: ipInfo.localIPs,
-      downlink: connection?.downlink || 0,
-      rtt: connection?.rtt || 0,
-      saveData: connection?.saveData || false
-    };
-  } catch (error) {
-    console.error('Network detection error:', error);
-    return {
-      type: 'unknown',
-      connectionType: 'unknown',
-      publicIP: null,
-      localIPs: [],
-      downlink: 0,
-      rtt: 0,
-      saveData: false
-    };
-  }
-}
-
-  // Enhanced network type detection
-  let networkType = 'unknown';
-  
-  // First try to get actual connection type if available
-  if (connection.type) {
-    networkType = connection.type;
-  } 
-  // Then fall back to effectiveType
-  else if (connection.effectiveType) {
-    networkType = connection.effectiveType;
-  }
-
-  // Additional checks for 5G
-  if (networkType === 'cellular') {
-    // Check for 5G capabilities
-    if (connection.downlink > 50 && connection.rtt < 50) { // 5G typically has higher downlink
-      networkType = '5g';
-    } else {
-      networkType = '4g';
+      return {
+        type: hasPrivateIP,
+        connectionType,
+        publicIP: ipInfo.publicIP,
+        localIPs: ipInfo.localIPs,
+        downlink: connection?.downlink || 0,
+        rtt: connection?.rtt || 0,
+        saveData: connection?.saveData || false
+      };
+    } catch (error) {
+      console.error('Network detection error:', error);
+      return {
+        type: 'unknown',
+        connectionType: 'unknown',
+        publicIP: null,
+        localIPs: [],
+        downlink: 0,
+        rtt: 0,
+        saveData: false
+      };
     }
   }
 
-  // Check for WiFi
-  if (navigator.onLine && !navigator.connection) {
-    // Fallback for browsers without connection API
-    networkType = 'wifi';
-  }
-
-  return {
-    type: networkType,
-    effectiveType: connection.effectiveType || 'unknown',
-    downlink: connection.downlink || 0,
-    rtt: connection.rtt || 0,
-    saveData: connection.saveData || false,
-    // Add more details if available
-    ...(connection.type ? { connectionType: connection.type } : {}),
-    ...(connection.downlinkMax ? { downlinkMax: connection.downlinkMax } : {})
-  };
-}
   // ======================
   // Fingerprint Collection
   // ======================
@@ -402,17 +366,17 @@ class FingerprintMediaTest {
     const publicIP = await this.getPublicIP();
     const vpnCheck = publicIP ? await this.detectVPNorProxy(publicIP) : null;
     const isIncognito = await this.detectIncognito();
-    const now = new Date(); 
+    const networkInfo = await this.getNetworkInfo();
     const istTime = new Date().toLocaleString('en-IN', {
-  timeZone: 'Asia/Kolkata',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: true
-});
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
     
     return {
       // Basic browser info
@@ -429,17 +393,16 @@ class FingerprintMediaTest {
 
       // Network info
       network: {
-      publicIP: networkInfo.publicIP,
-      localIPs: networkInfo.localIPs,
-      type: networkInfo.type,
-      connection: {
-        type: networkInfo.connectionType,
-        downlink: networkInfo.downlink,
-        rtt: networkInfo.rtt,
-        saveData: networkInfo.saveData
-      }
-    },
-      
+        publicIP: networkInfo.publicIP,
+        localIPs: networkInfo.localIPs,
+        type: networkInfo.type,
+        connection: {
+          type: networkInfo.connectionType,
+          downlink: networkInfo.downlink,
+          rtt: networkInfo.rtt,
+          saveData: networkInfo.saveData
+        }
+      },
       
       // Screen info
       screen: {
@@ -555,13 +518,6 @@ class FingerprintMediaTest {
       );
       
       stream = await Promise.race([streamPromise, timeoutPromise]);
-      
-      // Actually use VPN detection
-      const publicIP = await this.getPublicIP();
-      if (publicIP) {
-        const vpnCheck = await this.checkIPForVPN(publicIP);
-        this.locationInfo = { ip_address: publicIP, vpn_detection: vpnCheck };
-      }
       
       await this.setupVideoStream(stream);
 
@@ -956,63 +912,62 @@ class FingerprintMediaTest {
           level: battery.level
         };
       }
+      return null;
     } catch (e) {
       return null;
     }
   }
 
   async getLocalIPs() {
-  return new Promise((resolve) => {
-    const ips = [];
-    const RTCPeerConnection = window.RTCPeerConnection || 
-                            window.webkitRTCPeerConnection || 
-                            window.mozRTCPeerConnection;
+    return new Promise((resolve) => {
+      const ips = [];
+      const RTCPeerConnection = window.RTCPeerConnection || 
+                              window.webkitRTCPeerConnection || 
+                              window.mozRTCPeerConnection;
 
-    if (!RTCPeerConnection) {
-      resolve([]);
-      return;
-    }
-
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      iceCandidatePoolSize: 10
-    });
-
-    // Create a dummy data channel
-    pc.createDataChannel('');
-
-    pc.onicecandidate = (event) => {
-      if (!event.candidate) {
-        // Gathering complete
-        setTimeout(() => {
-          pc.close();
-          // Remove duplicates before resolving
-          resolve([...new Set(ips)]);
-        }, 2000);
+      if (!RTCPeerConnection) {
+        resolve([]);
         return;
       }
 
-      const candidate = event.candidate.candidate;
-      if (candidate) {
-        // Improved IP extraction that handles different candidate formats
-        const ipMatch = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/);
-        if (ipMatch && !ips.includes(ipMatch[1])) {
-          ips.push(ipMatch[1]);
-        }
-      }
-    };
-
-    pc.createOffer()
-      .then(offer => pc.setLocalDescription(offer))
-      .catch(err => {
-        console.error('Error creating offer:', err);
-        resolve([]);
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        iceCandidatePoolSize: 10
       });
-  });
-}
-      
-    
 
+      // Create a dummy data channel
+      pc.createDataChannel('');
+
+      pc.onicecandidate = (event) => {
+        if (!event.candidate) {
+          // Gathering complete
+          setTimeout(() => {
+            pc.close();
+            // Remove duplicates before resolving
+            resolve([...new Set(ips)]);
+          }, 2000);
+          return;
+        }
+
+        const candidate = event.candidate.candidate;
+        if (candidate) {
+          // Improved IP extraction that handles different candidate formats
+          const ipMatch = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/);
+          if (ipMatch && !ips.includes(ipMatch[1])) {
+            ips.push(ipMatch[1]);
+          }
+        }
+      };
+
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .catch(err => {
+          console.error('Error creating offer:', err);
+          resolve([]);
+        });
+    });
+  }
+  
   // ======================
   // Data Processing
   // ======================
@@ -1052,7 +1007,7 @@ class FingerprintMediaTest {
       location_info: {
         ip_address: rawData.network.publicIP,
         local_ips: rawData.network.localIPs,
-        network_type: rawData.network.connection?.effectiveType || 'unknown'
+        network_type: rawData.network.connection?.type || 'unknown'
       },
       display_info: {
         screen_resolution: `${rawData.screen.width}x${rawData.screen.height}`,
