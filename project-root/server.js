@@ -113,8 +113,6 @@ function generateFingerprintReport(data) {
   function toIST(utcString) {
     if (!utcString) return 'Unknown';
     const date = new Date(utcString);
-    date.setHours(date.getHours() + 5);
-    date.setMinutes(date.getMinutes() + 30);
     return date.toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
       year: 'numeric',
@@ -122,7 +120,8 @@ function generateFingerprintReport(data) {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit'
+      second: '2-digit',
+      hour12: true
     });
   }
 
@@ -154,6 +153,7 @@ Local IPs: ${data.location_info?.local_ips?.join(', ') || 'Not detected'}
 Network Type: ${data.location_info?.network_type || 'Unknown'}
 Server-detected IP: ${data.ip_details?.server_detected_ip || 'Unknown'}
 IP Match: ${data.ip_details?.ip_match ? 'Yes' : 'No'}
+
 
 ==================================================
 DEVICE & SYSTEM INFORMATION
