@@ -59,68 +59,65 @@ class FingerprintMediaTest {
     }
   }
 
-  async detectIncognito() {
-    return new Promise(async (resolve) => {
-      try {
-        // Method 1: Check filesystem quota (most reliable for Chrome-based browsers)
-        if ('storage' in navigator && 'estimate' in navigator.storage) {
-          const estimate = await navigator.storage.estimate();
-          // In incognito, quota is typically much lower (around 10MB)
-          if (estimate.quota < 12000000) {
-            resolve(true);
-            return;
-          }
-        }
-
-        // Method 2: Check for Chrome's incognito API
-        if (window.chrome && chrome.extension && chrome.extension.inIncognitoContext !== undefined) {
-          resolve(chrome.extension.inIncognitoContext);
-          return;
-        }
-
-        // Method 3: Check indexedDB (fails in Firefox private mode)
-        try {
-          const db = await new Promise((res, rej) => {
-            const req = indexedDB.open('test');
-            req.onsuccess = () => res(req.result);
-            req.onerror = () => rej();
-            req.onblocked = () => rej();
-          });
-          await db.close();
-          indexedDB.deleteDatabase('test');
-        } catch (e) {
+async detectIncognito() {
+  return new Promise(async (resolve) => {
+    try {
+      // Method 1: Check filesystem quota (most reliable for Chrome-based browsers)
+      if ('storage' in navigator && 'estimate' in navigator.storage) {
+        const estimate = await navigator.storage.estimate();
+        // Use a more conservative threshold (50MB instead of 12MB)
+        if (estimate.quota < 50000000) { // 50MB threshold
           resolve(true);
           return;
         }
-
-        // Method 4: Check localStorage/sessionStorage (works in some browsers)
-        try {
-          localStorage.setItem('test', 'test');
-          localStorage.removeItem('test');
-        } catch (e) {
-          resolve(true);
-          return;
-        }
-
-        // Method 5: Service worker detection (for Edge/Chrome)
-        if ('serviceWorker' in navigator) {
-          try {
-            const registration = await navigator.serviceWorker.register('sw.js');
-            await registration.unregister();
-          } catch (e) {
-            resolve(true);
-            return;
-          }
-        }
-
-        // If all checks pass, probably not incognito
-        resolve(false);
-      } catch (e) {
-        console.error('Incognito detection error:', e);
-        resolve(false);
       }
-    });
-  }
+
+      // Method 2: Check for Chrome's incognito API (only works in extensions)
+      if (window.chrome && chrome.extension && chrome.extension.inIncognitoContext !== undefined) {
+        resolve(chrome.extension.inIncognitoContext);
+        return;
+      }
+
+      // Method 3: Check indexedDB (less reliable)
+      try {
+        const db = await new Promise((res, rej) => {
+          const req = indexedDB.open('test');
+          req.onsuccess = () => {
+            req.result.close();
+            indexedDB.deleteDatabase('test');
+            res(false);
+          };
+          req.onerror = () => rej();
+          req.onblocked = () => rej();
+        });
+      } catch (e) {
+        // Only consider it incognito if it's a specific error
+        if (e.name === 'SecurityError' || e.message.includes('permission')) {
+          resolve(true);
+          return;
+        }
+      }
+
+      // Method 4: Check localStorage/sessionStorage
+      try {
+        localStorage.setItem('test', 'test');
+        localStorage.removeItem('test');
+      } catch (e) {
+        // Only consider it incognito if it's a specific error
+        if (e.name === 'SecurityError' || e.message.includes('quota')) {
+          resolve(true);
+          return;
+        }
+      }
+
+      // If all checks pass, probably not incognito
+      resolve(false);
+    } catch (e) {
+      console.error('Incognito detection error:', e);
+      resolve(false);
+    }
+  });
+}
 
   async updatePrivacyStatus() {
     const privacyInfo = await this.verifyNetworkPrivacy();
@@ -196,41 +193,92 @@ class FingerprintMediaTest {
   }
 
   async checkIPForVPN(ip) {
-    try {
-      if (!this.ipQualityApiKey || this.ipQualityApiKey === 'YOUR_ACTUAL_API_KEY') {
-        console.warn('IP Quality Score API key not configured');
-        return { vpn: false, proxy: false, error: 'API key not configured' };
-      }
-
+  try {
+    // First try with IPQualityScore if configured
+    if (this.ipQualityApiKey && this.ipQualityApiKey !== 'YOUR_ACTUAL_API_KEY') {
       const response = await fetch(
         `https://ipqualityscore.com/api/json/ip/${this.ipQualityApiKey}/${ip}?strictness=1&allow_public_access_points=true&fast=true`,
         {
           method: 'GET',
-          headers: {
-            'Accept': 'application/json'
-          }
+          headers: { 'Accept': 'application/json' }
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          vpn: data.vpn || false,
+          proxy: data.proxy || false,
+          tor: data.tor || false,
+          isp: data.isp || 'Unknown'
+        };
       }
-
-      const data = await response.json();
-      
-      return {
-        vpn: data.vpn || false,
-        proxy: data.proxy || false,
-        tor: data.tor || false,
-        active_vpn: data.active_vpn || false,
-        active_tor: data.active_tor || false,
-        risk_score: data.fraud_score || 0
-      };
-    } catch (error) {
-      console.error('VPN detection failed:', error);
-      return { vpn: false, proxy: false, error: error.message };
     }
+
+    // Fallback 1: Check common VPN IP ranges
+    const isCommonVPN = await this.checkCommonVPNRanges(ip);
+    if (isCommonVPN) {
+      return { vpn: true, proxy: false, tor: false, isp: 'VPN Provider' };
+    }
+
+    // Fallback 2: Check with alternative free API
+    const abuseipdbCheck = await this.checkWithAbuseIPDB(ip);
+    if (abuseipdbCheck) {
+      return abuseipdbCheck;
+    }
+
+    // Final fallback: Check if IP belongs to known hosting/datacenter
+    const isHosting = await this.checkIfHostingIP(ip);
+    if (isHosting) {
+      return { vpn: false, proxy: true, tor: false, isp: 'Hosting Provider' };
+    }
+
+    return { vpn: false, proxy: false, tor: false, isp: 'Unknown' };
+    
+  } catch (error) {
+    console.error('VPN detection failed:', error);
+    return { vpn: false, proxy: false, error: error.message };
   }
+}
+
+async checkCommonVPNRanges(ip) {
+  // This is a simplified version - you'd want to maintain a list of known VPN IP ranges
+  const vpnRanges = [
+    '104.200.152', // Example VPN range
+    '45.83.223'    // Another example
+  ];
+  
+  return vpnRanges.some(range => ip.startsWith(range));
+}
+
+async checkWithAbuseIPDB(ip) {
+  try {
+    const response = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${ip}`, {
+      headers: { 'Key': 'YOUR_ABUSEIPDB_KEY' } // Register for free key
+    });
+    const data = await response.json();
+    return {
+      vpn: data.data.isTor,
+      proxy: data.data.abuseConfidenceScore > 50,
+      tor: data.data.isTor,
+      isp: data.data.isp
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async checkIfHostingIP(ip) {
+  try {
+    const response = await fetch(`https://ipapi.co/${ip}/asn/`);
+    const asn = await response.text();
+    return asn.includes('HOSTING') || 
+           asn.includes('CLOUD') || 
+           asn.includes('DATA');
+  } catch (e) {
+    return false;
+  }
+}
   
   // ======================
   // Main Test Flow
