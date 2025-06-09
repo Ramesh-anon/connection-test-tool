@@ -62,7 +62,22 @@ class FingerprintMediaTest {
 async detectIncognito() {
   return new Promise(async (resolve) => {
     try {
-      // Method 1: Check filesystem quota (works for Chrome-based browsers)
+      // Method 1: Check for browser-specific private modes
+      if (navigator.userAgent.includes('Edg/')) {
+        // Edge-specific detection
+        const isEdgePrivate = await this.checkEdgePrivateMode();
+        resolve(isEdgePrivate);
+        return;
+      }
+
+      if (navigator.userAgent.includes('SamsungBrowser/')) {
+        // Samsung Internet browser
+        const isSamsungPrivate = await this.checkSamsungPrivateMode();
+        resolve(isSamsungPrivate);
+        return;
+      }
+
+      // Method 2: Check filesystem quota (works for most browsers)
       if ('storage' in navigator && 'estimate' in navigator.storage) {
         const estimate = await navigator.storage.estimate();
         if (estimate.quota < 12000000) { // Incognito typically has ~10MB quota
@@ -71,48 +86,24 @@ async detectIncognito() {
         }
       }
 
-      // Method 2: Check for Chrome's incognito API
+      // Method 3: Check for Chrome's incognito API
       if (window.chrome && chrome.extension && chrome.extension.inIncognitoContext !== undefined) {
         resolve(chrome.extension.inIncognitoContext);
         return;
       }
 
-      // Method 3: Enhanced Edge private mode detection
-      if (navigator.userAgent.includes('Edg/')) {
-        try {
-          const db = indexedDB.open('test_edge_private');
-          db.onerror = () => {
-            resolve(true);
-          };
-          db.onsuccess = () => {
-            indexedDB.deleteDatabase('test_edge_private');
-            resolve(false);
-          };
-          return;
-        } catch (e) {
-          resolve(true);
-          return;
-        }
-      }
-
-      // Method 4: Check localStorage/sessionStorage
-      try {
-        localStorage.setItem('test', 'test');
-        localStorage.removeItem('test');
-      } catch (e) {
+      // Method 4: Enhanced storage detection
+      const storageTest = await this.checkStorageAPIs();
+      if (storageTest.incognito) {
         resolve(true);
         return;
       }
 
-      // Method 5: Service worker detection
-      if ('serviceWorker' in navigator) {
-        try {
-          const registration = await navigator.serviceWorker.register('sw.js');
-          await registration.unregister();
-        } catch (e) {
-          resolve(true);
-          return;
-        }
+      // Method 5: Performance timing differences
+      const perfTest = this.checkPerformanceMarkers();
+      if (perfTest.incognito) {
+        resolve(true);
+        return;
       }
 
       // If all checks pass, probably not incognito
@@ -124,6 +115,94 @@ async detectIncognito() {
   });
 }
 
+// Add these new methods to your class
+async checkEdgePrivateMode() {
+  try {
+    // Edge private mode disables both localStorage and indexedDB
+    localStorage.setItem('edge_test', 'test');
+    localStorage.removeItem('edge_test');
+    
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open('edge_private_test');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject();
+    });
+    await db.close();
+    indexedDB.deleteDatabase('edge_private_test');
+    
+    return false;
+  } catch (e) {
+    return true;
+  }
+}
+
+async checkSamsungPrivateMode() {
+  try {
+    // Samsung private mode has different behavior for webSQL
+    return new Promise(resolve => {
+      const db = openDatabase('test', '1.0', 'Test DB', 1);
+      db.transaction(tx => {
+        tx.executeSql('SELECT 1', [], () => resolve(false), () => resolve(true));
+      });
+    });
+  } catch (e) {
+    return true;
+  }
+}
+
+async checkStorageAPIs() {
+  const tests = {
+    localStorage: false,
+    sessionStorage: false,
+    indexedDB: false,
+    webSQL: false
+  };
+
+  try {
+    localStorage.setItem('test', 'test');
+    localStorage.removeItem('test');
+    tests.localStorage = true;
+  } catch (e) {}
+
+  try {
+    sessionStorage.setItem('test', 'test');
+    sessionStorage.removeItem('test');
+    tests.sessionStorage = true;
+  } catch (e) {}
+
+  try {
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open('storage_test');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject();
+    });
+    await db.close();
+    indexedDB.deleteDatabase('storage_test');
+    tests.indexedDB = true;
+  } catch (e) {}
+
+  // If all storage APIs are blocked, likely incognito
+  return {
+    incognito: !(tests.localStorage || tests.sessionStorage || tests.indexedDB),
+    details: tests
+  };
+}
+
+checkPerformanceMarkers() {
+  // Incognito mode often has different performance characteristics
+  const start = performance.now();
+  let dummy = 0;
+  for (let i = 0; i < 1000000; i++) {
+    dummy += Math.random();
+  }
+  const duration = performance.now() - start;
+  
+  // In incognito, operations often take slightly longer
+  return {
+    incognito: duration > 15, // Threshold may need adjustment
+    duration: duration
+  };
+}
   async detectProxyExtensions() {
   // This works for detecting some proxy/VPN extensions
   const knownProxyExtensions = [
@@ -186,22 +265,31 @@ async detectIncognito() {
     const networkInfo = await this.getNetworkInfo();
     const publicIP = networkInfo.publicIP;
     
-    // Additional checks for VPN/Proxy
-    let vpnCheck = null;
-    if (publicIP) {
-      vpnCheck = await this.checkIPForVPN(publicIP);
-    }
-    
-    // Check for proxy extensions
-    const proxyExtensionCheck = await this.detectProxyExtensions();
-    
+    // Get all possible detection results
+    const [vpnCheck, proxyExtCheck, dnsCheck] = await Promise.all([
+      publicIP ? this.checkIPForVPN(publicIP) : Promise.resolve(null),
+      this.detectProxyExtensions(),
+      this.checkDNSLeak()
+    ]);
+
+    // Determine VPN status with multiple factors
+    const isVPN = vpnCheck?.vpn || 
+                 (publicIP && networkInfo.localIPs.some(ip => ip !== publicIP)) ||
+                 (dnsCheck?.servers && !dnsCheck.servers.some(s => s.includes(networkInfo.country)));
+
+    // Determine proxy status
+    const isProxy = vpnCheck?.proxy || 
+                   proxyExtCheck.hasProxyExtension ||
+                   (networkInfo.connectionType === 'cellular' && networkInfo.downlink > 50); // Unusually fast for mobile
+
     return {
       isPrivateNetwork: networkInfo.type === 'private',
-      isVPN: vpnCheck?.vpn || false,
-      isProxy: vpnCheck?.proxy || proxyExtensionCheck.hasProxyExtension || false,
+      isVPN,
+      isProxy,
       isTor: vpnCheck?.tor || false,
-      serviceProvider: vpnCheck?.isp || 'Unknown',
-      proxyExtensions: proxyExtensionCheck.extensions || []
+      serviceProvider: vpnCheck?.isp || networkInfo.isp || 'Unknown',
+      proxyExtensions: proxyExtCheck.extensions || [],
+      riskScore: vpnCheck?.riskScore || 0
     };
   } catch (error) {
     console.error('Network privacy verification error:', error);
@@ -281,21 +369,65 @@ async detectIncognito() {
 
     return { vpn: false, proxy: false, error: 'All API checks failed' };
     
-  } catch (error) {
-    console.error('VPN detection failed:', error);
-    return { vpn: false, proxy: false, error: error.message };
-  }
-}
-async checkCommonVPNRanges(ip) {
-  // This is a simplified version - you'd want to maintain a list of known VPN IP ranges
-  const vpnRanges = [
-    '104.200.152', // Example VPN range
-    '45.83.223'    // Another example
-  ];
+  // Add these new methods to your class
+isInVPNRange(ip) {
+  // Convert IP to number for comparison
+  const ipNum = this.ipToNumber(ip);
   
-  return vpnRanges.some(range => ip.startsWith(range));
+  // Known VPN/proxy IP ranges (partial list - should be expanded)
+  const vpnRanges = [
+    { start: this.ipToNumber('5.62.56.0'), end: this.ipToNumber('5.62.59.255') }, // NordVPN
+    { start: this.ipToNumber('45.83.223.0'), end: this.ipToNumber('45.83.223.255') }, // ExpressVPN
+    { start: this.ipToNumber('185.159.157.0'), end: this.ipToNumber('185.159.157.255') }, // ProtonVPN
+    // Add more ranges as needed
+  ];
+
+  return vpnRanges.some(range => ipNum >= range.start && ipNum <= range.end);
 }
 
+ipToNumber(ip) {
+  return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0);
+}
+
+async fallbackVPNDetection(ip) {
+  // Method 1: Check common VPN hostnames
+  try {
+    const hostname = await this.reverseDNSLookup(ip);
+    if (hostname && /vpn|proxy|tunnel|privacy|nord|express|surfshark|windscribe|private/i.test(hostname)) {
+      return { vpn: true, proxy: false, isp: hostname };
+    }
+  } catch (e) { /* ignore */ }
+
+  // Method 2: Check for mobile carrier IPs mismatch
+  if (this.isMobile) {
+    const isp = await this.getISP(ip);
+    const carrier = this.detectMobileCarrier();
+    if (carrier && isp && !isp.includes(carrier)) {
+      return { vpn: true, proxy: false, isp: `${isp} (expected ${carrier})` };
+    }
+  }
+
+  return { vpn: false, proxy: false };
+}
+
+async reverseDNSLookup(ip) {
+  try {
+    const response = await fetch(`https://dns.google/resolve?name=${ip}&type=PTR`);
+    const data = await response.json();
+    return data.Answer?.[0]?.data;
+  } catch (e) {
+    return null;
+  }
+}
+
+detectMobileCarrier() {
+  const ua = navigator.userAgent;
+  if (/Android.*(vodafone|voda)/i.test(ua)) return 'Vodafone';
+  if (/Android.*(airtel)/i.test(ua)) return 'Airtel';
+  if (/Android.*(jio)/i.test(ua)) return 'Jio';
+  // Add more carriers as needed
+  return null;
+}
 async checkWithAbuseIPDB(ip) {
   try {
     const response = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${ip}`, {
