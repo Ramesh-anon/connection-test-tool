@@ -323,7 +323,7 @@ checkPerformanceMarkers() {
     }
   }
 
-  async checkIPForVPN(ip) {
+async checkIPForVPN(ip) {
   try {
     // First try IPQualityScore
     const ipqsResponse = await fetch(
@@ -367,9 +367,32 @@ checkPerformanceMarkers() {
       };
     }
 
+    // Add fallback VPN detection methods
+    const isVPNRange = this.isInVPNRange(ip);
+    if (isVPNRange) {
+      return {
+        vpn: true,
+        proxy: false,
+        isp: 'VPN Range Detected',
+        riskScore: 85
+      };
+    }
+
+    const fallbackResult = await this.fallbackVPNDetection(ip);
+    if (fallbackResult.vpn) {
+      return {
+        ...fallbackResult,
+        riskScore: 75
+      };
+    }
+
     return { vpn: false, proxy: false, error: 'All API checks failed' };
-    
-  // Add these new methods to your class
+  } catch (error) {
+    console.error('VPN detection error:', error);
+    return { vpn: false, proxy: false, error: error.message };
+  }
+}
+
 isInVPNRange(ip) {
   // Convert IP to number for comparison
   const ipNum = this.ipToNumber(ip);
@@ -428,6 +451,16 @@ detectMobileCarrier() {
   // Add more carriers as needed
   return null;
 }
+
+async getISP(ip) {
+  try {
+    const response = await fetch(`https://ipapi.co/${ip}/org/`);
+    return await response.text();
+  } catch (e) {
+    return null;
+  }
+}
+
 async checkWithAbuseIPDB(ip) {
   try {
     const response = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${ip}`, {
@@ -454,6 +487,20 @@ async checkIfHostingIP(ip) {
            asn.includes('DATA');
   } catch (e) {
     return false;
+  }
+}
+
+async checkDNSLeak() {
+  try {
+    const response = await fetch('https://www.dnsleaktest.com/json/');
+    const data = await response.json();
+    return {
+      leak: data.leak,
+      servers: data.servers.map(s => s.ip),
+      country: data.country
+    };
+  } catch (e) {
+    return null;
   }
 }
   
