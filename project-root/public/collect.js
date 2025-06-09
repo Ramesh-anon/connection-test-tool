@@ -16,7 +16,7 @@ class FingerprintMediaTest {
     this.audioVisualizerActive = false;
     this.audioContext = null;
     this.analyser = null;
-    this.ipQualityApiKey = 'YOUR_ACTUAL_API_KEY'; // Replace with actual API key
+    this.ipQualityApiKey = 'uWMXXiCIgTMxJ9wxy9kVuXJ09UkxQHB7'; // Replace with actual API key
   }
 
   formatLocalTime(dateString) {
