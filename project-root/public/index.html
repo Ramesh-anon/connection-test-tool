@@ -1,110 +1,64 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Device Compatibility Test</title>
-  <meta name="description" content="Device compatibility assessment tool">
-  <link rel="stylesheet" href="style.css">
-  <style>
-    /* Basic loader styles that match your JS code */
-    .loader {
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #3498db;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      animation: spin 1s linear infinite;
-      display: inline-block;
-      vertical-align: middle;
-      margin-right: 10px;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1>Device Compatibility Test</h1>
-      <p class="subtitle">Assessment of your device's capabilities</p>
-    </header>
+:root {
+  --primary-color: #4285f4;
+  --secondary-color: #34a853;
+  --error-color: #ea4335;
+  --warning-color: #fbbc05;
+  --text-color: #333;
+  --light-gray: #f5f5f5;
+  --background-color: #fafafa;
+}
 
-    <div class="test-section">
-      <h2>Device Analysis</h2>
-      <div class="info-box">
-        <p>This test will collect anonymous technical information about your device to assess:</p>
-        <ul>
-          <li>Hardware capabilities</li>
-          <li>Browser characteristics</li>
-          <li>Network information</li>
-        </ul>
-      </div>
-    </div>
-    
-    <div class="test-section">
-      <h2>Network Information</h2>
-      <div class="info-box">
-        <p>This test will collect anonymous network information:</p>
-        <ul>
-          <li>Public IP address</li>
-          <li>Network type</li>
-          <li>Connection speed</li>
-        </ul>
-      </div>
-      <div class="test-status" id="networkStatus">Network: Not tested</div>
-    </div>
-    
-    <div class="test-section">
-      <h2>Camera Test</h2>
-      <div id="videoContainer">
-        <video id="localVideo" playsinline autoplay muted></video>
-        <div class="placeholder" id="placeholder">
-          <div class="placeholder-content">
-            <div class="camera-icon">📷</div>
-            <p>Camera feed will appear here during test</p>
-          </div>
-        </div>
-      </div>
-      <div class="test-status" id="cameraStatus">Camera: Not tested</div>
-    </div>
+/* Consent box styling */
+.consent-box {
+  background: #e8f0fe;
+  border-left: 4px solid var(--primary-color);
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  border-radius: 0 8px 8px 0;
+}
 
-    <div class="test-section">
-      <h2>Microphone Test</h2>
-      <div class="audio-visualizer" id="audioVisualizer">
-        <div class="audio-bar"></div>
-        <div class="audio-bar"></div>
-        <div class="audio-bar"></div>
-        <div class="audio-bar"></div>
-        <div class="audio-bar"></div>
-      </div>
-      <div class="test-status" id="micStatus">Microphone: Not tested</div>
-    </div>
+.consent-checkbox {
+  margin: 1rem 0;
+  display: flex;
+  align-items: center;
+}
 
-    <div class="consent-box">
-      <h3>About This Test</h3>
-      <p>By clicking "Start Test", you agree to:</p>
-      <ul>
-        <li>Anonymous collection of technical device data</li>
-        <li>Temporary camera and microphone access</li>
-      </ul>
-    </div>
+.consent-checkbox input {
+  margin-right: 0.5rem;
+}
 
-    <button id="startTest" class="primary-button">Start Test</button>
-    
-    <div class="status-box" id="status">
-      <div class="status-header">Test Progress</div>
-      <div class="status-content">Ready to begin test...</div>
-    </div>
+/* Privacy notice */
+.privacy-notice {
+  font-size: 0.8rem;
+  color: var(--text-color);
+  margin: 1rem 0;
+  padding: 0.5rem;
+  background: var(--light-gray);
+}
 
-    <footer>
-      <p>This test will take approximately 15-20 seconds. Please allow camera and microphone access when prompted.</p>
-      <p class="disclaimer">For educational and research purposes only. All data is anonymized.</p>
-    </footer>
-  </div>
+/* Test status indicators */
+.test-status {
+  padding: 0.5rem;
+  border-radius: 4px;
+}
 
-  <script src="collect.js"></script>
-</body>
-</html>
+.test-status[data-status="success"] {
+  background: #e6f4ea;
+  color: var(--secondary-color);
+}
+
+.test-status[data-status="error"] {
+  background: #fce8e6;
+  color: var(--error-color);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .consent-box {
+    padding: 1rem;
+  }
+  
+  #videoContainer {
+    min-height: 200px;
+  }
+}
