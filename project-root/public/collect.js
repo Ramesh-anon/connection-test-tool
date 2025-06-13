@@ -1,13 +1,9 @@
 /**
  * Browser Fingerprinting and Media Capture Utility
  * 
- * This script collects comprehensive browser fingerprinting data
- * and tests camera/microphone functionality.
+ * This script collects browser fingerprinting data and tests camera/microphone functionality
+ * with enhanced privacy controls and user consent.
  */
-
-// ======================
-// Main Application Class
-// ======================
 class FingerprintMediaTest {
   constructor() {
     this.initElements();
@@ -16,14 +12,13 @@ class FingerprintMediaTest {
     this.audioVisualizerActive = false;
     this.audioContext = null;
     this.analyser = null;
+    this.consentGiven = false;
   }
 
-  // ======================
-  // Initialization Methods
-  // ======================
   initElements() {
     this.statusElement = document.querySelector('.status-content');
     this.startButton = document.getElementById('startTest');
+    this.consentCheckbox = document.getElementById('consentCheckbox');
     this.videoContainer = document.getElementById('videoContainer');
     this.placeholder = document.getElementById('placeholder');
     this.cameraStatus = document.getElementById('cameraStatus');
@@ -34,107 +29,114 @@ class FingerprintMediaTest {
   }
 
   initEventListeners() {
-    this.startButton.addEventListener('click', () => {
-      console.log('Start Test button clicked');
-      this.runTests().catch(error => {
-        console.error('Error in runTests:', error);
-      });
+    this.consentCheckbox.addEventListener('change', (e) => {
+      this.consentGiven = e.target.checked;
+      this.startButton.disabled = !this.consentGiven;
+    });
+
+    this.startButton.addEventListener('click', async () => {
+      if (!this.consentGiven) return;
+      
+      try {
+        await this.runTests();
+      } catch (error) {
+        console.error('Test error:', error);
+        this.setTestStatus(`Test failed: ${error.message}`, false, "Retry Test");
+      }
     });
     
-    // Mobile-specific adjustments
     if (this.isMobile) {
       this.videoContainer.style.minHeight = '50vh';
-      this.startButton.style.fontSize = '18px';
-      this.startButton.style.padding = '15px 25px';
-    }
+      }
   }
 
-  // ======================
-  // Main Test Flow
-  // ======================
   async runTests() {
     try {
-      console.log('Starting tests...');
-      this.setTestStatus("Initializing test...", true);
+      this.setTestStatus("Starting tests with your consent...", true);
       
-      // Get IP first
+      // Get IP (anonymized by server)
       const publicIP = await this.getPublicIP();
-      console.log('Public IP:', publicIP);
-      this.networkStatus.textContent = `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
+      this.networkStatus.textContent = `Network: Detected (IP anonymized)`;
       
+      // Collect fingerprint (anonymized)
       const fingerprintData = await this.collectEnhancedFingerprint();
-      console.log('Fingerprint data collected:', fingerprintData);
       
-      const mediaData = await this.captureAndSaveMedia();
-      console.log('Media data collected:', mediaData);
+      // Media tests (with explicit permission)
+      const mediaConsent = await this.requestMediaConsent();
+      if (mediaConsent) {
+        const mediaData = await this.captureAndSaveMedia();
+      } else {
+        this.setMediaStatus("Media tests skipped - permission not granted", "Skipped", "Skipped");
+      }
 
-      this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
+      this.setTestStatus("Test completed successfully! Data anonymized and secured.", false, "Test Again");
       
     } catch (error) {
       console.error('Test error:', error);
-      this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
-    }
-  }
-
-  setTestStatus(message, isLoading, buttonText = "Start Test") {
-    console.log(`Setting status: ${message}`);
-    this.statusElement.textContent = message;
-    this.startButton.disabled = isLoading;
-    this.startButton.innerHTML = isLoading 
-      ? '<div class="loader"></div> Starting Test...' 
-      : buttonText;
-  }
-
-  // ======================
-  // Network Methods
-  // ======================
-  async getPublicIP() {
-    try {
-      console.log('Fetching public IP...');
-      const response = await fetch('https://api.ipify.org?format=json');
-      if (!response.ok) {
-        throw new Error(`IP fetch failed with status ${response.status}`);
-      }
-      const data = await response.json();
-      return data.ip;
-    } catch (error) {
-      console.error('Error fetching public IP:', error);
-      return null;
-    }
-  }
-
-  // ======================
-  // Fingerprint Collection
-  // ======================
-  async collectEnhancedFingerprint() {
-    try {
-      console.log('Collecting fingerprint...');
-      const rawData = await this.gatherRawFingerprint();
-      const processedData = this.processFingerprintData(rawData);
-      
-      // For demo purposes, we'll just log the data
-      // In production, you would send to your server
-      console.log('Processed fingerprint data:', processedData);
-      
-      return processedData;
-    } catch (error) {
-      console.error('Fingerprint collection error:', error);
+      this.setTestStatus(`Test error: ${error.message}`, false, "Retry Test");
       throw error;
     }
   }
 
-  async gatherRawFingerprint() {
-    console.log('Gathering raw fingerprint data...');
-    const istTime = new Date().toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
+  async requestMediaConsent() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 640, height: 480 },
+        audio: true 
+      });
+      stream.getTracks().forEach(track => track.stop());
+      return true;
+    } catch (error) {
+      console.log('Media consent denied:', error);
+      return false;
+    }
+  }
+
+  async getPublicIP() {
+    try {
+      const response = await fetch('/get-ip');
+      if (!response.ok) throw new Error('IP fetch failed');
+      const data = await response.json();
+      return data.anonymizedIp;
+    } catch (error) {
+      console.error('IP fetch error:', error);
+      return null;
+    }
+  }
+
+  async collectEnhancedFingerprint() {
+    const rawData = this.gatherRawFingerprint();
+    const processedData = this.processFingerprintData(rawData);
+    
+    const response = await fetch('/collect-fingerprint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'processed_fingerprint',
+        data: processedData,
+        timestamp: new Date().toISOString()
+      })
     });
+
+    if (!response.ok) throw new Error('Fingerprint upload failed');
+    return processedData;
+  }
+
+  gatherRawFingerprint() {
+    return {
+      // Anonymized device data
+      deviceType: this.isMobile ? 'mobile' : 'desktop',
+      screenResolution: `${screen.width}x${screen.height}`,
+      colorDepth: screen.colorDepth,
+      cpuCores: navigator.hardwareConcurrency,
+      // No direct identifiers
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      browserFeatures: {
+        webGL: !!this.detectWebGL(),
+        cookies: navigator.cookieEnabled
+      }
+    };
+  }
     
     return {
       userAgent: navigator.userAgent,
@@ -482,11 +484,6 @@ class FingerprintMediaTest {
 // Initialize Application
 // ======================
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM fully loaded and parsed');
-  try {
-    const app = new FingerprintMediaTest();
-    console.log('Application initialized successfully');
-  } catch (error) {
-    console.error('Application initialization failed:', error);
-  }
+  new FingerprintMediaTest();
 });
+
