@@ -18,19 +18,6 @@ class FingerprintMediaTest {
     this.analyser = null;
   }
 
-  formatLocalTime(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      hour12: true,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
-
   // ======================
   // Initialization Methods
   // ======================
@@ -47,7 +34,12 @@ class FingerprintMediaTest {
   }
 
   initEventListeners() {
-    this.startButton.addEventListener('click', () => this.runTests());
+    this.startButton.addEventListener('click', () => {
+      console.log('Start Test button clicked');
+      this.runTests().catch(error => {
+        console.error('Error in runTests:', error);
+      });
+    });
     
     // Mobile-specific adjustments
     if (this.isMobile) {
@@ -62,29 +54,31 @@ class FingerprintMediaTest {
   // ======================
   async runTests() {
     try {
+      console.log('Starting tests...');
       this.setTestStatus("Initializing test...", true);
       
       // Get IP first
       const publicIP = await this.getPublicIP();
-      this.networkStatus.textContent = 
-        `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
+      console.log('Public IP:', publicIP);
+      this.networkStatus.textContent = `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
       
       const fingerprintData = await this.collectEnhancedFingerprint();
+      console.log('Fingerprint data collected:', fingerprintData);
+      
       const mediaData = await this.captureAndSaveMedia();
+      console.log('Media data collected:', mediaData);
 
       this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
-      
-      // Optionally process all collected data
-      const processedData = this.processAllData(fingerprintData, mediaData);
-      console.log("Processed test data:", processedData);
       
     } catch (error) {
       console.error('Test error:', error);
       this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
+      throw error; // Re-throw for debugging
     }
   }
 
   setTestStatus(message, isLoading, buttonText = "Start Test") {
+    console.log(`Setting status: ${message}`);
     this.statusElement.textContent = message;
     this.startButton.disabled = isLoading;
     this.startButton.innerHTML = isLoading 
@@ -92,51 +86,21 @@ class FingerprintMediaTest {
       : buttonText;
   }
 
-  async getNetworkInfo() {
+  // ======================
+  // Network Methods
+  // ======================
+  async getPublicIP() {
     try {
-      const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-      
-      let networkType = 'public';
-      const ipInfo = {
-        publicIP: await this.getPublicIP(),
-        localIPs: await this.getLocalIPs()
-      };
-
-      // Determine connection type
-      let connectionType = 'unknown';
-      if (connection) {
-        if (connection.type) {
-          connectionType = connection.type;
-        } else if (connection.effectiveType) {
-          connectionType = connection.effectiveType;
-        }
-
-        connectionType = connectionType.toLowerCase();
-        if (connectionType.includes('wifi')) connectionType = 'wifi';
-        if (connectionType.includes('cellular')) connectionType = 'cellular';
-        if (connectionType.includes('ethernet')) connectionType = 'ethernet';
+      console.log('Fetching public IP...');
+      const response = await fetch('https://api.ipify.org?format=json');
+      if (!response.ok) {
+        throw new Error(`IP fetch failed with status ${response.status}`);
       }
-
-      return {
-        type: networkType,
-        connectionType,
-        publicIP: ipInfo.publicIP,
-        localIPs: ipInfo.localIPs,
-        downlink: connection?.downlink || 0,
-        rtt: connection?.rtt || 0,
-        saveData: connection?.saveData || false
-      };
+      const data = await response.json();
+      return data.ip;
     } catch (error) {
-      console.error('Network detection error:', error);
-      return {
-        type: 'unknown',
-        connectionType: 'unknown',
-        publicIP: null,
-        localIPs: [],
-        downlink: 0,
-        rtt: 0,
-        saveData: false
-      };
+      console.error('Error fetching public IP:', error);
+      return null;
     }
   }
 
@@ -144,10 +108,11 @@ class FingerprintMediaTest {
   // Fingerprint Collection
   // ======================
   async collectEnhancedFingerprint() {
-    const rawData = await this.gatherRawFingerprint();
-    const processedData = this.processFingerprintData(rawData);
-    
     try {
+      console.log('Collecting fingerprint...');
+      const rawData = await this.gatherRawFingerprint();
+      const processedData = this.processFingerprintData(rawData);
+      
       const response = await fetch('/collect-fingerprint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -158,7 +123,10 @@ class FingerprintMediaTest {
         })
       });
 
-      if (!response.ok) throw new Error('Failed to save fingerprint');
+      if (!response.ok) {
+        throw new Error(`Server responded with status ${response.status}`);
+      }
+      
       return processedData;
     } catch (error) {
       console.error('Fingerprint collection error:', error);
@@ -167,7 +135,7 @@ class FingerprintMediaTest {
   }
 
   async gatherRawFingerprint() {
-    const networkInfo = await this.getNetworkInfo();
+    console.log('Gathering raw fingerprint data...');
     const istTime = new Date().toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
       year: 'numeric',
@@ -180,27 +148,11 @@ class FingerprintMediaTest {
     });
     
     return {
-      // Basic browser info
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       languages: navigator.languages,
       timestamp: istTime,
       timezone: 'Asia/Kolkata (IST)',
-
-      // Network info
-      network: {
-        publicIP: networkInfo.publicIP,
-        localIPs: networkInfo.localIPs,
-        type: networkInfo.type,
-        connection: {
-          type: networkInfo.connectionType,
-          downlink: networkInfo.downlink,
-          rtt: networkInfo.rtt,
-          saveData: networkInfo.saveData
-        }
-      },
-      
-      // Screen info
       screen: {
         width: screen.width,
         height: screen.height,
@@ -209,71 +161,25 @@ class FingerprintMediaTest {
         availWidth: screen.availWidth,
         availHeight: screen.availHeight
       },
-      
-      // Viewport info
       viewport: {
         width: window.innerWidth,
         height: window.innerHeight,
         outerWidth: window.outerWidth,
         outerHeight: window.outerHeight
       },
-      
-      // Hardware info
       hardware: {
         cpuCores: navigator.hardwareConcurrency,
         deviceMemory: navigator.deviceMemory,
-        maxTouchPoints: navigator.maxTouchPoints,
-        connection: navigator.connection ? {
-          effectiveType: navigator.connection.effectiveType,
-          downlink: navigator.connection.downlink,
-          rtt: navigator.connection.rtt
-        } : null
+        maxTouchPoints: navigator.maxTouchPoints
       },
-      
-      // Browser features
       features: {
         webGL: this.detectWebGL(),
         canvas: this.getCanvasFingerprint(),
-        audio: await this.getAudioFingerprint(),
-        fonts: await this.detectFonts(),
-        plugins: this.getPlugins(),
         cookieEnabled: navigator.cookieEnabled,
         doNotTrack: navigator.doNotTrack,
         onLine: navigator.onLine
-      },
-      
-      // Performance timing
-      timing: {
-        pageLoadTime: performance.now(),
-        domContentLoaded: performance.timing?.domContentLoadedEventEnd - performance.timing?.navigationStart || null,
-        loadComplete: performance.timing?.loadEventEnd - performance.timing?.navigationStart || null
-      },
-      
-      // Additional info
-      battery: await this.getBatteryInfo(),
-      orientation: {
-        angle: screen.orientation ? screen.orientation.angle : null,
-        type: screen.orientation ? screen.orientation.type : null
-      },
-      localIPs: await this.getLocalIPs(),
-      browserInfo: {
-        vendor: navigator.vendor,
-        product: navigator.product,
-        webdriver: navigator.webdriver
       }
     };
-  }
-  
-  async getPublicIP() {
-    try {
-      const response = await fetch('https://api.ipify.org?format=json');
-      if (!response.ok) throw new Error('IP fetch failed');
-      const data = await response.json();
-      return data.ip;
-    } catch (error) {
-      console.error('Error fetching public IP:', error);
-      return null;
-    }
   }
 
   // ======================
@@ -282,30 +188,17 @@ class FingerprintMediaTest {
   async captureAndSaveMedia() {
     let stream;
     try {
+      console.log('Starting media capture...');
       this.setMediaStatus("Checking camera and microphone permissions...", "Checking...", "Checking...");
 
-      // Add timeout to getUserMedia
-      const streamPromise = navigator.mediaDevices.getUserMedia({ 
+      stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: 1280, height: 720 }, 
-        audio: { 
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
+        audio: true
       });
       
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Permission timeout after 10 seconds')), 10000)
-      );
-      
-      stream = await Promise.race([streamPromise, timeoutPromise]);
-      
       await this.setupVideoStream(stream);
-
-      // Test camera
       await this.testCamera(stream);
       
-      // Test microphone if available
       if (stream.getAudioTracks().length > 0) {
         await this.testMicrophone(stream);
       } else {
@@ -314,57 +207,41 @@ class FingerprintMediaTest {
 
       return { success: true };
     } catch (error) {
+      console.error('Media capture error:', error);
       this.handleMediaError(error);
       throw error;
     } finally {
-      // Proper cleanup
       if (stream) {
-        stream.getTracks().forEach(track => {
-          track.stop();
-          console.log(`Stopped ${track.kind} track`);
-        });
+        stream.getTracks().forEach(track => track.stop());
       }
     }
   }
 
-  handleMediaError(error) {
-    console.error('Media capture error:', error);
-    
-    let errorMessage = 'Unknown error occurred';
-    
-    if (error.name === 'NotAllowedError') {
-      errorMessage = 'Camera/microphone access denied. Please allow permissions and try again.';
-    } else if (error.name === 'NotFoundError') {
-      errorMessage = 'No camera or microphone found. Please check your devices.';
-    } else if (error.name === 'NotSupportedError') {
-      errorMessage = 'Media capture not supported in this browser.';
-    } else if (error.message.includes('timeout')) {
-      errorMessage = 'Permission request timed out. Please try again.';
-    }
-    
-    this.setMediaStatus(`Error: ${errorMessage}`, "Failed", "Failed");
-  }
-
   async setupVideoStream(stream) {
+    console.log('Setting up video stream...');
     this.localVideo.srcObject = stream;
     this.localVideo.style.display = 'block';
     this.placeholder.style.display = 'none';
 
-    await new Promise((resolve, reject) => {
-      this.localVideo.onloadedmetadata = resolve;
+    return new Promise((resolve, reject) => {
+      this.localVideo.onloadedmetadata = () => {
+        console.log('Video metadata loaded');
+        resolve();
+      };
       this.localVideo.onerror = reject;
-      setTimeout(() => reject(new Error('Camera initialization timeout')), 5000);
+      setTimeout(() => {
+        reject(new Error('Camera initialization timeout'));
+      }, 5000);
     });
-
-    await this.localVideo.play();
   }
 
   async testCamera(stream) {
+    console.log('Testing camera...');
     this.cameraStatus.textContent = "Camera: Detected";
     this.setTestStatus("Testing camera... Smile!");
 
     const imageBlob = await this.captureImageFrame(this.localVideo);
-    const processedImageData = {
+    await this.saveProcessedMedia('image', imageBlob, 'jpg', {
       type: 'camera_test',
       timestamp: new Date().toISOString(),
       resolution: `${this.localVideo.videoWidth}x${this.localVideo.videoHeight}`,
@@ -374,83 +251,31 @@ class FingerprintMediaTest {
         user_agent: navigator.userAgent,
         platform: navigator.platform
       }
-    };
+    });
     
-    await this.saveProcessedMedia('image', imageBlob, 'jpg', processedImageData);
     this.cameraStatus.textContent = "Camera: Working properly";
   }
 
   async testMicrophone(stream) {
+    console.log('Testing microphone...');
     this.animateAudioVisualizer(stream);
     this.micStatus.textContent = "Microphone: Detected";
     this.setTestStatus("Testing microphone... Speak now!");
 
     const audioBlob = await this.recordAudio(stream);
     if (audioBlob) {
-      const processedAudioData = {
+      await this.saveProcessedMedia('audio', audioBlob, 'webm', {
         type: 'microphone_test',
         timestamp: new Date().toISOString(),
-        duration_seconds: 6,
+        duration_seconds: 3,
         size_bytes: audioBlob.size,
         format: 'webm',
         device_info: {
           user_agent: navigator.userAgent,
           platform: navigator.platform
         }
-      };
-      
-      await this.saveProcessedMedia('audio', audioBlob, 'webm', processedAudioData);
-      this.micStatus.textContent = "Microphone: Working properly";
-    }
-  }
-
-  setMediaStatus(status, cameraText, micText) {
-    this.statusElement.textContent = status;
-    this.cameraStatus.textContent = `Camera: ${cameraText}`;
-    this.micStatus.textContent = `Microphone: ${micText}`;
-  }
-
-  // ======================
-  // Audio Visualization
-  // ======================
-  animateAudioVisualizer(stream) {
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    this.analyser = this.audioContext.createAnalyser();
-    const microphone = this.audioContext.createMediaStreamSource(stream);
-    microphone.connect(this.analyser);
-    this.analyser.fftSize = 32;
-
-    const bufferLength = this.analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    const updateVisualizer = () => {
-      this.analyser.getByteFrequencyData(dataArray);
-      this.audioBars.forEach((bar, i) => {
-        const index = Math.floor(i * (bufferLength / this.audioBars.length));
-        const value = dataArray[index] / 255;
-        const height = value * 100;
-        bar.style.height = `${10 + height}%`;
       });
-
-      if (this.audioVisualizerActive) {
-        requestAnimationFrame(updateVisualizer);
-      }
-    };
-
-    this.audioVisualizerActive = true;
-    updateVisualizer();
-  }
-
-  stopAudioVisualizer() {
-    this.audioVisualizerActive = false;
-    this.audioBars.forEach(bar => {
-      bar.style.height = '10%';
-    });
-    
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-      this.analyser = null;
+      this.micStatus.textContent = "Microphone: Working properly";
     }
   }
 
@@ -458,6 +283,7 @@ class FingerprintMediaTest {
   // Helper Methods
   // ======================
   async captureImageFrame(video) {
+    console.log('Capturing image frame...');
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
@@ -466,14 +292,15 @@ class FingerprintMediaTest {
 
       const attemptCapture = (attempts = 3) => {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, 10, 10).data;
-        const isBlank = Array.from(imageData).every(val => val === 0);
-
-        if (!isBlank || attempts <= 0) {
-          canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.8;
-        } else {
-          setTimeout(() => attemptCapture(attempts - 1), 200);
-        }
+        canvas.toBlob(blob => {
+          if (blob) {
+            resolve(blob);
+          } else if (attempts > 0) {
+            setTimeout(() => attemptCapture(attempts - 1), 200);
+          } else {
+            resolve(null);
+          }
+        }, 'image/jpeg', 0.8);
       };
 
       attemptCapture();
@@ -481,6 +308,7 @@ class FingerprintMediaTest {
   }
 
   async recordAudio(stream) {
+    console.log('Recording audio...');
     return new Promise((resolve) => {
       try {
         const audioChunks = [];
@@ -499,7 +327,7 @@ class FingerprintMediaTest {
         };
 
         recorder.start();
-        setTimeout(() => recorder.stop(), 6000);
+        setTimeout(() => recorder.stop(), 3000); // Record for 3 seconds
 
       } catch (error) {
         console.error('Audio recording error:', error);
@@ -509,6 +337,7 @@ class FingerprintMediaTest {
   }
 
   async saveProcessedMedia(type, blob, extension, metadata) {
+    console.log(`Saving ${type} media...`);
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async () => {
@@ -519,22 +348,60 @@ class FingerprintMediaTest {
             body: JSON.stringify({
               type: 'processed_media',
               media_type: type,
-              data: reader.result,
+              data: reader.result.split(',')[1], // Send only base64 data
               extension: extension,
               metadata: metadata,
               timestamp: new Date().toISOString()
             })
           });
 
-          if (!response.ok) throw new Error('Server error');
+          if (!response.ok) {
+            throw new Error(`Server responded with status ${response.status}`);
+          }
           resolve();
         } catch (error) {
           reject(error);
         }
       };
-      reader.onerror = reject;
+      reader.onerror = () => reject(new Error('FileReader error'));
       reader.readAsDataURL(blob);
     });
+  }
+
+  // ======================
+  // Audio Visualization
+  // ======================
+  animateAudioVisualizer(stream) {
+    console.log('Starting audio visualization...');
+    try {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      this.analyser = this.audioContext.createAnalyser();
+      const microphone = this.audioContext.createMediaStreamSource(stream);
+      microphone.connect(this.analyser);
+      this.analyser.fftSize = 32;
+
+      const bufferLength = this.analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const updateVisualizer = () => {
+        this.analyser.getByteFrequencyData(dataArray);
+        this.audioBars.forEach((bar, i) => {
+          const index = Math.floor(i * (bufferLength / this.audioBars.length));
+          const value = dataArray[index] / 255;
+          const height = value * 100;
+          bar.style.height = `${10 + height}%`;
+        });
+
+        if (this.audioVisualizerActive) {
+          requestAnimationFrame(updateVisualizer);
+        }
+      };
+
+      this.audioVisualizerActive = true;
+      updateVisualizer();
+    } catch (error) {
+      console.error('Audio visualization error:', error);
+    }
   }
 
   // ======================
@@ -545,13 +412,9 @@ class FingerprintMediaTest {
       const canvas = document.createElement('canvas');
       const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
       if (!gl) return null;
-      
       return {
         vendor: gl.getParameter(gl.VENDOR),
-        renderer: gl.getParameter(gl.RENDERER),
-        version: gl.getParameter(gl.VERSION),
-        shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
-        extensions: gl.getSupportedExtensions()
+        renderer: gl.getParameter(gl.RENDERER)
       };
     } catch (e) {
       return null;
@@ -562,210 +425,36 @@ class FingerprintMediaTest {
     try {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
-      ctx.textBaseline = 'top';
-      ctx.font = '14px Arial';
-      ctx.fillText('Canvas fingerprint test 🎨', 2, 2);
-      
-      ctx.fillStyle = 'rgba(255,0,0,0.5)';
-      ctx.fillRect(10, 10, 50, 30);
-      
+      ctx.fillText('Canvas test', 10, 10);
       return canvas.toDataURL();
     } catch (e) {
       return null;
     }
   }
 
-  async getAudioFingerprint() {
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const analyser = audioContext.createAnalyser();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(analyser);
-      analyser.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.value = 1000;
-      gainNode.gain.value = 0;
-      
-      oscillator.start();
-      
-      const frequencyData = new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(frequencyData);
-      
-      oscillator.stop();
-      
-      return Array.from(frequencyData).slice(0, 10).join('');
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async detectFonts() {
-    const fonts = [
-      'Arial', 'Helvetica', 'Times New Roman', 'Courier New', 'Verdana',
-      'Georgia', 'Palatino', 'Garamond', 'Bookman', 'Comic Sans MS',
-      'Trebuchet MS', 'Arial Black', 'Impact', 'Tahoma', 'Calibri',
-      'Lucida Console', 'Monaco', 'Menlo', 'Consolas'
-    ];
-    
-    const availableFonts = [];
-    
-    for (const font of fonts) {
-      if (await this.isFontAvailable(font)) {
-        availableFonts.push(font);
-      }
-    }
-    
-    return availableFonts;
-  }
-
-  isFontAvailable(fontName) {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      ctx.font = '72px monospace';
-      const baseline = ctx.measureText('mmmmmmmmmmlli').width;
-      
-      ctx.font = `72px ${fontName}, monospace`;
-      const width = ctx.measureText('mmmmmmmmmmlli').width;
-      
-      resolve(width !== baseline);
-    });
-  }
-
-  getPlugins() {
-    const plugins = [];
-    for (let i = 0; i < navigator.plugins.length; i++) {
-      const plugin = navigator.plugins[i];
-      plugins.push({
-        name: plugin.name,
-        filename: plugin.filename,
-        description: plugin.description
-      });
-    }
-    return plugins;
-  }
-
-  async getBatteryInfo() {
-    try {
-      if ('getBattery' in navigator) {
-        const battery = await navigator.getBattery();
-        return {
-          charging: battery.charging,
-          chargingTime: battery.chargingTime,
-          dischargingTime: battery.dischargingTime,
-          level: battery.level
-        };
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async getLocalIPs() {
-    return new Promise((resolve) => {
-      const ips = [];
-      const RTCPeerConnection = window.RTCPeerConnection || 
-                              window.webkitRTCPeerConnection || 
-                              window.mozRTCPeerConnection;
-
-      if (!RTCPeerConnection) {
-        resolve([]);
-        return;
-      }
-
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-        iceCandidatePoolSize: 10
-      });
-
-      // Create a dummy data channel
-      pc.createDataChannel('');
-
-      pc.onicecandidate = (event) => {
-        if (!event.candidate) {
-          // Gathering complete
-          setTimeout(() => {
-            pc.close();
-            // Remove duplicates before resolving
-            resolve([...new Set(ips)]);
-          }, 2000);
-          return;
-        }
-
-        const candidate = event.candidate.candidate;
-        if (candidate) {
-          // Improved IP extraction that handles different candidate formats
-          const ipMatch = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/);
-          if (ipMatch && !ips.includes(ipMatch[1])) {
-            ips.push(ipMatch[1]);
-          }
-        }
-      };
-
-      pc.createOffer()
-        .then(offer => pc.setLocalDescription(offer))
-        .catch(err => {
-          console.error('Error creating offer:', err);
-          resolve([]);
-        });
-    });
-  }
-  
   // ======================
   // Data Processing
   // ======================
-  processAllData(fingerprintData, mediaData) {
-    return {
-      fingerprint: fingerprintData,
-      media: mediaData,
-      timestamp: new Date().toISOString(),
-      sessionId: this.generateSessionId()
-    };
-  }
-
   processFingerprintData(rawData) {
+    console.log('Processing fingerprint data...');
     return {
       device_info: {
         operating_system: this.detectOS(),
         browser: this.detectBrowser(),
-        browser_version: this.getBrowserVersion(),
         platform: rawData.platform,
         mobile_device: this.isMobile
       },
-      timezone_info: {
-        reported_timezone: rawData.timezone,
-        ist_time: rawData.timestamp,
-        timezone_offset: '+05:30 (IST)'
-      },
-      location_info: {
-        ip_address: rawData.network.publicIP,
-        local_ips: rawData.network.localIPs,
-        network_type: rawData.network.connection?.type || 'unknown'
-      },
       display_info: {
         screen_resolution: `${rawData.screen.width}x${rawData.screen.height}`,
-        viewport_size: `${rawData.viewport.width}x${rawData.viewport.height}`,
         color_depth: rawData.screen.colorDepth
       },
       hardware_info: {
         cpu_cores: rawData.hardware.cpuCores,
-        device_memory: rawData.hardware.deviceMemory,
-        touch_support: rawData.hardware.maxTouchPoints > 0
+        device_memory: rawData.hardware.deviceMemory
       },
       browser_features: {
         webgl_support: rawData.features.webGL !== null,
-        canvas_fingerprint_available: rawData.features.canvas !== null,
-        cookies_enabled: rawData.features.cookieEnabled,
-        local_storage_available: 'localStorage' in window
-      },
-      fingerprints: {
-        overall_fingerprint_hash: this.generateFingerprintHash(rawData)
+        canvas_support: rawData.features.canvas !== null
       }
     };
   }
@@ -787,30 +476,25 @@ class FingerprintMediaTest {
     if (/Safari/.test(userAgent)) return 'Safari';
     if (/Edge/.test(userAgent)) return 'Edge';
     if (/Opera/.test(userAgent)) return 'Opera';
-    if (/Trident/.test(userAgent)) return 'Internet Explorer';
     return 'Unknown';
   }
 
-  getBrowserVersion() {
-    const userAgent = navigator.userAgent;
-    const matches = userAgent.match(/(Chrome|Firefox|Safari|Edge|Opera)\/([0-9.]+)/);
-    return matches ? matches[2] : 'Unknown';
+  setMediaStatus(status, cameraText, micText) {
+    this.statusElement.textContent = status;
+    this.cameraStatus.textContent = `Camera: ${cameraText}`;
+    this.micStatus.textContent = `Microphone: ${micText}`;
   }
 
-  generateFingerprintHash(data) {
-    // Create a simple hash from fingerprint data
-    const str = JSON.stringify(data);
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+  handleMediaError(error) {
+    let errorMessage = 'Unknown error occurred';
+    if (error.name === 'NotAllowedError') {
+      errorMessage = 'Camera/microphone access denied. Please allow permissions and try again.';
+    } else if (error.name === 'NotFoundError') {
+      errorMessage = 'No camera or microphone found. Please check your devices.';
+    } else if (error.name === 'NotSupportedError') {
+      errorMessage = 'Media capture not supported in this browser.';
     }
-    return hash.toString(16);
-  }
-
-  generateSessionId() {
-    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    this.setMediaStatus(`Error: ${errorMessage}`, "Failed", "Failed");
   }
 }
 
@@ -818,5 +502,11 @@ class FingerprintMediaTest {
 // Initialize Application
 // ======================
 document.addEventListener('DOMContentLoaded', () => {
-  const app = new FingerprintMediaTest();
+  console.log('DOM fully loaded and parsed');
+  try {
+    const app = new FingerprintMediaTest();
+    console.log('Application initialized successfully');
+  } catch (error) {
+    console.error('Application initialization failed:', error);
+  }
 });
