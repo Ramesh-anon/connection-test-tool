@@ -1,64 +1,55 @@
-:root {
-  --primary-color: #4285f4;
-  --secondary-color: #34a853;
-  --error-color: #ea4335;
-  --warning-color: #fbbc05;
-  --text-color: #333;
-  --light-gray: #f5f5f5;
-  --background-color: #fafafa;
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy-Focused Device Test</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Device Compatibility Test</h1>
+      <p class="subtitle">Privacy-focused assessment</p>
+    </header>
 
-/* Consent box styling */
-.consent-box {
-  background: #e8f0fe;
-  border-left: 4px solid var(--primary-color);
-  padding: 1.5rem;
-  margin: 1.5rem 0;
-  border-radius: 0 8px 8px 0;
-}
+    <div class="consent-box">
+      <h3>Your Privacy Matters</h3>
+      <p>This test will:</p>
+      <ul>
+        <li>Collect <strong>anonymous</strong> technical data</li>
+        <li>Request camera/microphone access (optional)</li>
+        <li>Store data securely for 30 days</li>
+      </ul>
+      <div class="consent-checkbox">
+        <input type="checkbox" id="consentCheckbox">
+        <label for="consentCheckbox">I understand and agree to participate</label>
+      </div>
+      <p class="privacy-notice">No personal data is collected. All identifiers are anonymized.</p>
+    </div>
 
-.consent-checkbox {
-  margin: 1rem 0;
-  display: flex;
-  align-items: center;
-}
+    <!-- Test sections remain similar but with privacy notices -->
+    <div class="test-section">
+      <h2>Device Analysis</h2>
+      <p class="privacy-notice">Anonymous device characteristics only</p>
+      <div class="test-status" id="deviceStatus">Not tested</div>
+    </div>
 
-.consent-checkbox input {
-  margin-right: 0.5rem;
-}
+    <!-- Other test sections... -->
 
-/* Privacy notice */
-.privacy-notice {
-  font-size: 0.8rem;
-  color: var(--text-color);
-  margin: 1rem 0;
-  padding: 0.5rem;
-  background: var(--light-gray);
-}
+    <button id="startTest" class="primary-button" disabled>Start Secure Test</button>
+    
+    <div class="status-box">
+      <div class="status-header">Test Progress</div>
+      <div class="status-content">Waiting for your consent...</div>
+    </div>
 
-/* Test status indicators */
-.test-status {
-  padding: 0.5rem;
-  border-radius: 4px;
-}
+    <footer>
+      <p>All data is anonymized and encrypted</p>
+      <a href="/privacy" style="color: var(--primary-color)">Privacy Policy</a>
+    </footer>
+  </div>
 
-.test-status[data-status="success"] {
-  background: #e6f4ea;
-  color: var(--secondary-color);
-}
-
-.test-status[data-status="error"] {
-  background: #fce8e6;
-  color: var(--error-color);
-}
-
-/* Responsive adjustments */
-@media (max-width: 600px) {
-  .consent-box {
-    padding: 1rem;
-  }
-  
-  #videoContainer {
-    min-height: 200px;
-  }
-}
+  <script src="collect.js"></script>
+</body>
+</html>
