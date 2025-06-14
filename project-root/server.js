@@ -1,4 +1,4 @@
-require('dotenv').config(); // Load environment variables from .env file
+require('dotenv').config();
 const express = require('express');
 const cloudinary = require('cloudinary').v2;
 const geoip = require('geoip-lite');
@@ -27,7 +27,7 @@ function configureCloudinary() {
       api_key: process.env.CLOUDINARY_API_KEY,
       api_secret: process.env.CLOUDINARY_API_SECRET,
       secure: true,
-      timeout: 10000 // 10 second timeout
+      timeout: 10000
     });
     console.log('Cloudinary configured successfully');
     return cloudinary;
@@ -88,8 +88,8 @@ async function initializeApp() {
 
   // Rate limiting
   app.use(rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: 'Too many requests from this IP, please try again later'
   }));
 
@@ -198,8 +198,9 @@ async function initializeApp() {
           }
         ),
         new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Upload timeout')), 10000);
-    })
+          setTimeout(() => reject(new Error('Upload timeout')), 10000);
+        })
+      ]);
 
       console.log('Fingerprint saved successfully:', uploadResult.secure_url);
       
