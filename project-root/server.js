@@ -1,3 +1,27 @@
+async function verifyCloudinary() {
+  try {
+    console.log('Verifying Cloudinary configuration...');
+    const result = await cloudinary.uploader.upload(
+      'data:application/json;base64,eyJ0ZXN0Ijoic3VjY2VzcyJ9',
+      { 
+        folder: 'connection_test',
+        resource_type: 'raw',
+        timeout: 5000
+      }
+    );
+    console.log('Cloudinary connection verified:', result.secure_url);
+    return true;
+  } catch (error) {
+    console.error('Cloudinary verification failed:', {
+      message: error.message,
+      stack: error.stack
+    });
+    process.exit(1);
+  }
+}
+
+// Call this before starting the server
+verifyCloudinary();
 const express = require('express');
 const cloudinary = require('cloudinary').v2;
 const geoip = require('geoip-lite');
@@ -155,43 +179,81 @@ app.get('/get-ip', (req, res) => {
 
 app.post('/collect-fingerprint', async (req, res) => {
   try {
-    if (!req.body || typeof req.body !== 'object') {
-      console.error('Invalid fingerprint data received:', req.body);
-      return res.status(400).json({ error: 'Invalid fingerprint data' });
+    console.log('Received fingerprint request headers:', req.headers);
+    
+    if (!req.body) {
+      console.error('Empty request body received');
+      return res.status(400).json({ 
+        error: 'No data received',
+        details: 'Request body was empty'
+      });
+    }
+
+    // Validate required fields
+    const requiredFields = ['type', 'data', 'timestamp'];
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields);
+      return res.status(400).json({
+        error: 'Missing required fields',
+        details: missingFields
+      });
+    }
+
+    // Verify Cloudinary configuration
+    if (!process.env.CLOUDINARY_CLOUD_NAME || 
+        !process.env.CLOUDINARY_API_KEY || 
+        !process.env.CLOUDINARY_API_SECRET) {
+      console.error('Cloudinary credentials not configured');
+      return res.status(500).json({
+        error: 'Server configuration error',
+        details: 'Cloudinary credentials missing'
+      });
     }
 
     const clientInfo = getClientInfo(req);
-    console.log('Received fingerprint data from:', clientInfo.ip);
+    console.log('Processing fingerprint from IP:', clientInfo.ip);
     
-    const fingerprintHash = generateHash(req.body);
-    const uploadData = { ...clientInfo, ...req.body, fingerprintHash };
+    // Prepare upload data
+    const uploadData = {
+      ...clientInfo,
+      ...req.body.data,
+      fingerprintHash: generateHash(req.body.data)
+    };
+
+    console.log('Attempting Cloudinary upload with data size:', 
+      JSON.stringify(uploadData).length, 'bytes');
     
-    console.log('Attempting Cloudinary upload...');
-    const result = await uploadToCloudinary(uploadData, 'fingerprints');
-    
-    console.log('Successfully uploaded fingerprint:', {
-      url: result.secure_url,
-      ip: clientInfo.ip
-    });
+    // Upload to Cloudinary with timeout
+    const result = await Promise.race([
+      uploadToCloudinary(uploadData, 'fingerprints'),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Upload timeout after 10 seconds')), 10000)
+      )
+    ]);
+
+    console.log('Fingerprint saved successfully:', result.secure_url);
     
     res.json({ 
       success: true, 
       url: result.secure_url,
-      hash: fingerprintHash
+      hash: uploadData.fingerprintHash
     });
 
   } catch (error) {
     console.error('Fingerprint endpoint error:', {
-      error: error.message,
+      message: error.message,
       stack: error.stack,
-      body: req.body
+      bodySize: req.body ? JSON.stringify(req.body).length : 'no body',
+      headers: req.headers
     });
     
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to save fingerprint',
       details: process.env.NODE_ENV === 'development' ? {
         message: error.message,
-        stack: error.stack
+        type: error.name
       } : null
     });
   }
