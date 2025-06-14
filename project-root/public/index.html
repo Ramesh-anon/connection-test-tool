@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Device Compatibility Test</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="description" content="Device compatibility assessment tool">
+  <meta name="theme-color" content="#4285f4">
+  <title>Device Compatibility Test</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .loader {
@@ -58,10 +60,10 @@
     <div class="test-section">
       <h2>Camera Test</h2>
       <div id="videoContainer">
-        <video id="localVideo" playsinline autoplay muted></video>
+        <video id="localVideo" playsinline autoplay muted aria-label="Camera feed"></video>
         <div class="placeholder" id="placeholder">
           <div class="placeholder-content">
-            <div class="camera-icon">📷</div>
+            <div class="camera-icon" aria-hidden="true">📷</div>
             <p>Camera feed will appear here during test</p>
           </div>
         </div>
@@ -71,7 +73,7 @@
 
     <div class="test-section">
       <h2>Microphone Test</h2>
-      <div class="audio-visualizer" id="audioVisualizer">
+      <div class="audio-visualizer" id="audioVisualizer" aria-label="Audio visualizer">
         <div class="audio-bar"></div>
         <div class="audio-bar"></div>
         <div class="audio-bar"></div>
@@ -88,9 +90,12 @@
         <li>Anonymous collection of technical device data</li>
         <li>Temporary camera and microphone access</li>
       </ul>
+      <p class="privacy-notice">
+        <a href="#" id="privacyLink">Read our privacy policy</a> for more information.
+      </p>
     </div>
 
-    <button id="startTest" class="primary-button">Start Test</button>
+    <button id="startTest" class="primary-button" aria-label="Start test">Start Test</button>
     
     <div class="status-box" id="status">
       <div class="status-header">Test Progress</div>
@@ -99,9 +104,17 @@
 
     <footer>
       <p>This test will take approximately 10-15 seconds.</p>
+      <p class="copyright">&copy; <span id="currentYear"></span> Device Test Tool</p>
     </footer>
   </div>
 
+  <script>
+    document.getElementById('currentYear').textContent = new Date().getFullYear();
+    document.getElementById('privacyLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      alert('Privacy policy: We collect anonymous technical data about your device for compatibility testing purposes only. No personally identifiable information is stored.');
+    });
+  </script>
   <script src="collect.js"></script>
 </body>
 </html>
