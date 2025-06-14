@@ -1,4 +1,10 @@
-require('dotenv').config();
+// At the very top of server.js
+try {
+  require('dotenv').config();
+} catch (e) {
+  console.log('dotenv not found, assuming production environment with provided env vars');
+}
+
 const express = require('express');
 const cloudinary = require('cloudinary').v2;
 const geoip = require('geoip-lite');
