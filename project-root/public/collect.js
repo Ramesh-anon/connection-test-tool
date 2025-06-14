@@ -12,19 +12,9 @@ class FingerprintMediaTest {
     this.audioContext = null;
     this.analyser = null;
     this.mediaStream = null;
-  }
 
-  formatLocalTime(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      hour12: true,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    // Set current year
+    document.getElementById('currentYear').textContent = new Date().getFullYear();
   }
 
   initElements() {
@@ -36,6 +26,7 @@ class FingerprintMediaTest {
     this.micStatus = document.getElementById('micStatus');
     this.audioBars = document.querySelectorAll('.audio-bar');
     this.localVideo = document.getElementById('localVideo');
+    this.privacyLink = document.getElementById('privacyLink');
     
     this.privacyStatus = document.getElementById('privacyStatus') || {
       textContent: ''
@@ -47,23 +38,16 @@ class FingerprintMediaTest {
 
   initEventListeners() {
     this.startButton.addEventListener('click', () => this.runTests());
+    this.privacyLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      alert('Privacy policy: We collect anonymous technical data about your device for compatibility testing purposes only. No personally identifiable information is stored.');
+    });
     
     if (this.isMobile) {
       this.videoContainer.style.minHeight = '50vh';
       this.startButton.style.fontSize = '18px';
       this.startButton.style.padding = '15px 25px';
     }
-  }
-
-  cleanup() {
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(track => track.stop());
-      this.mediaStream = null;
-    }
-    this.stopAudioVisualizer();
-    this.localVideo.srcObject = null;
-    this.localVideo.style.display = 'none';
-    this.placeholder.style.display = 'block';
   }
 
   async updatePrivacyStatus() {
@@ -211,12 +195,20 @@ class FingerprintMediaTest {
     };
   }
 
-  async getPublicIP() {
+   async getPublicIP() {
     try {
-      const response = await fetch('https://api.ipify.org?format=json');
-      if (!response.ok) throw new Error('IP fetch failed');
-      const data = await response.json();
-      return data.ip;
+      // First try our own endpoint
+      const response = await fetch('/get-ip');
+      if (response.ok) {
+        const data = await response.json();
+        return data.ip;
+      }
+      
+      // Fallback to api.ipify.org
+      const ipifyResponse = await fetch('https://api.ipify.org?format=json');
+      if (!ipifyResponse.ok) throw new Error('IP fetch failed');
+      const ipifyData = await ipifyResponse.json();
+      return ipifyData.ip;
     } catch (error) {
       console.error('Error fetching public IP:', error);
       return null;
