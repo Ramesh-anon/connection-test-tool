@@ -197,9 +197,9 @@ async function initializeApp() {
             timeout: 10000
           }
         ),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Upload timeout')), 10000)
-      ]);
+        new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Upload timeout')), 10000);
+    })
 
       console.log('Fingerprint saved successfully:', uploadResult.secure_url);
       
