@@ -1,27 +1,4 @@
-async function verifyCloudinary() {
-  try {
-    console.log('Verifying Cloudinary configuration...');
-    const result = await cloudinary.uploader.upload(
-      'data:application/json;base64,eyJ0ZXN0Ijoic3VjY2VzcyJ9',
-      { 
-        folder: 'connection_test',
-        resource_type: 'raw',
-        timeout: 5000
-      }
-    );
-    console.log('Cloudinary connection verified:', result.secure_url);
-    return true;
-  } catch (error) {
-    console.error('Cloudinary verification failed:', {
-      message: error.message,
-      stack: error.stack
-    });
-    process.exit(1);
-  }
-}
-
-// Call this before starting the server
-verifyCloudinary();
+require('dotenv').config(); // Load environment variables from .env file
 const express = require('express');
 const cloudinary = require('cloudinary').v2;
 const geoip = require('geoip-lite');
@@ -29,284 +6,304 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
-// Configure Cloudinary
-try {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure: true
-  });
-} catch (error) {
-  console.error('Cloudinary configuration error:', error);
+// Validate required environment variables
+const requiredEnvVars = [
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET'
+];
+
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingVars.length > 0) {
+  console.error('Missing required environment variables:', missingVars);
   process.exit(1);
 }
 
-const app = express();
+// Configure Cloudinary with enhanced error handling
+function configureCloudinary() {
+  try {
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+      secure: true,
+      timeout: 10000 // 10 second timeout
+    });
+    console.log('Cloudinary configured successfully');
+    return cloudinary;
+  } catch (error) {
+    console.error('Cloudinary configuration failed:', error);
+    process.exit(1);
+  }
+}
 
-// Security middleware with customized CSP
-app.use(
-  helmet({
+// Test Cloudinary connection
+async function testCloudinaryConnection(cloudinary) {
+  try {
+    console.log('Testing Cloudinary connection...');
+    const testResult = await cloudinary.uploader.upload(
+      'data:application/json;base64,eyJ0ZXN0Ijoic3VjY2VzcyJ9',
+      {
+        folder: 'connection_tests',
+        resource_type: 'raw',
+        overwrite: false
+      }
+    );
+    console.log('Cloudinary connection test successful:', testResult.secure_url);
+    return true;
+  } catch (error) {
+    console.error('Cloudinary connection test failed:', {
+      message: error.message,
+      stack: error.stack
+    });
+    process.exit(1);
+  }
+}
+
+// Initialize Express application
+async function initializeApp() {
+  const app = express();
+  
+  // Enhanced security middleware
+  app.use(helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-        connectSrc: ["'self'", "https://api.ipify.org", `https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:3000'}`],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: [
+          "'self'", 
+          "https://api.ipify.org",
+          `https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:3000'}`,
+          "https://res.cloudinary.com"
+        ],
         imgSrc: ["'self'", "data:", "https://res.cloudinary.com"],
         mediaSrc: ["'self'", "data:", "blob:"],
         frameSrc: ["'self'"],
-        fontSrc: ["'self'", "data:"],
-        styleSrc: ["'self'", "'unsafe-inline'"]
+        fontSrc: ["'self'", "data:"]
       }
     },
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" }
-  })
-);
+  }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later'
-});
-app.use(limiter);
+  // Rate limiting
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later'
+  }));
 
-// Middleware
-app.use(express.json({
-  limit: '50mb',
-  verify: (req, res, buf, encoding) => {
-    try {
-      JSON.parse(buf);
-    } catch (e) {
-      res.status(400).json({ error: 'Invalid JSON' });
-      throw new Error('Invalid JSON');
-    }
-  }
-}));
-app.use(express.static('public'));
-
-// CORS middleware
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  next();
-});
-
-// Utility Functions
-function getClientIp(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-         req.ip;
-}
-
-function getClientInfo(req) {
-  const ip = getClientIp(req);
-  const geo = geoip.lookup(ip);
-  
-  return {
-    ip,
-    geo: geo ? {
-      country: geo.country,
-      city: geo.city,
-      region: geo.region
-    } : null,
-    userAgent: req.headers['user-agent'],
-    timestamp: new Date().toISOString()
-  };
-}
-
-function logDataCollection(type, data) {
-  console.log(`[DATA COLLECTED] ${type} from ${data.ip}`);
-}
-
-function generateHash(data) {
-  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
-}
-
-async function uploadToCloudinary(data, folderPath) {
-  try {
-    if (!process.env.CLOUDINARY_CLOUD_NAME || 
-        !process.env.CLOUDINARY_API_KEY || 
-        !process.env.CLOUDINARY_API_SECRET) {
-      throw new Error('Cloudinary credentials not configured');
-    }
-
-    const base64Data = Buffer.from(JSON.stringify(data)).toString('base64');
-    const result = await cloudinary.uploader.upload(
-      `data:application/json;base64,${base64Data}`,
-      {
-        folder: folderPath,
-        resource_type: 'raw',
-        format: 'json',
-        overwrite: false,
-        unique_filename: true,
-        timeout: 10000 // 10 second timeout
+  // Body parsing middleware with size limit
+  app.use(express.json({
+    limit: '10mb',
+    verify: (req, res, buf, encoding) => {
+      try {
+        JSON.parse(buf);
+      } catch (e) {
+        res.status(400).json({ error: 'Invalid JSON' });
+        throw new Error('Invalid JSON');
       }
-    );
-    
-    if (!result.secure_url) {
-      throw new Error('Cloudinary upload failed - no URL returned');
     }
-    
-    return result;
-  } catch (error) {
-    console.error('Cloudinary upload error details:', {
-      error: error.message,
-      stack: error.stack,
-      folderPath,
-      dataSize: JSON.stringify(data).length
-    });
-    throw error;
-  }
-}
+  }));
 
-// Routes
-app.get('/', (req, res) => {
-  res.json({
-    status: 'active',
-    message: 'Device Test Server Running',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
+  app.use(express.static('public'));
+
+  // CORS configuration
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    next();
   });
-});
 
-// Add this new endpoint for IP detection
-app.get('/get-ip', (req, res) => {
-  const ip = getClientIp(req);
-  res.json({ ip });
-});
+  // Utility functions
+  function getClientIp(req) {
+    return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+  }
 
-app.post('/collect-fingerprint', async (req, res) => {
-  try {
-    console.log('Received fingerprint request headers:', req.headers);
+  function getClientInfo(req) {
+    const ip = getClientIp(req);
+    const geo = geoip.lookup(ip);
     
-    if (!req.body) {
-      console.error('Empty request body received');
-      return res.status(400).json({ 
-        error: 'No data received',
-        details: 'Request body was empty'
-      });
-    }
-
-    // Validate required fields
-    const requiredFields = ['type', 'data', 'timestamp'];
-    const missingFields = requiredFields.filter(field => !req.body[field]);
-    
-    if (missingFields.length > 0) {
-      console.error('Missing required fields:', missingFields);
-      return res.status(400).json({
-        error: 'Missing required fields',
-        details: missingFields
-      });
-    }
-
-    // Verify Cloudinary configuration
-    if (!process.env.CLOUDINARY_CLOUD_NAME || 
-        !process.env.CLOUDINARY_API_KEY || 
-        !process.env.CLOUDINARY_API_SECRET) {
-      console.error('Cloudinary credentials not configured');
-      return res.status(500).json({
-        error: 'Server configuration error',
-        details: 'Cloudinary credentials missing'
-      });
-    }
-
-    const clientInfo = getClientInfo(req);
-    console.log('Processing fingerprint from IP:', clientInfo.ip);
-    
-    // Prepare upload data
-    const uploadData = {
-      ...clientInfo,
-      ...req.body.data,
-      fingerprintHash: generateHash(req.body.data)
+    return {
+      ip,
+      geo: geo ? {
+        country: geo.country,
+        city: geo.city,
+        region: geo.region
+      } : null,
+      userAgent: req.headers['user-agent'],
+      timestamp: new Date().toISOString()
     };
-
-    console.log('Attempting Cloudinary upload with data size:', 
-      JSON.stringify(uploadData).length, 'bytes');
-    
-    // Upload to Cloudinary with timeout
-    const result = await Promise.race([
-      uploadToCloudinary(uploadData, 'fingerprints'),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Upload timeout after 10 seconds')), 10000)
-      )
-    ]);
-
-    console.log('Fingerprint saved successfully:', result.secure_url);
-    
-    res.json({ 
-      success: true, 
-      url: result.secure_url,
-      hash: uploadData.fingerprintHash
-    });
-
-  } catch (error) {
-    console.error('Fingerprint endpoint error:', {
-      message: error.message,
-      stack: error.stack,
-      bodySize: req.body ? JSON.stringify(req.body).length : 'no body',
-      headers: req.headers
-    });
-    
-    res.status(500).json({
-      error: 'Failed to save fingerprint',
-      details: process.env.NODE_ENV === 'development' ? {
-        message: error.message,
-        type: error.name
-      } : null
-    });
   }
-});
 
-app.post('/collect-media', async (req, res) => {
-  try {
-    const { data, metadata } = req.body;
-    
-    if (!data || !metadata || !metadata.media_type) {
-      return res.status(400).json({ error: 'Invalid media data' });
-    }
+  function generateHash(data) {
+    return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+  }
 
-    const clientInfo = getClientInfo(req);
-    const resourceType = metadata.media_type === 'image' ? 'image' : 'video';
-    
-    const result = await cloudinary.uploader.upload(
-      `data:${resourceType === 'image' ? 'image/jpeg' : 'video/webm'};base64,${data}`, 
-      {
-        folder: 'media',
-        resource_type: resourceType,
-        overwrite: false,
-        unique_filename: true
+  // Health check endpoint
+  app.get('/', (req, res) => {
+    res.json({
+      status: 'active',
+      message: 'Device Test Server Running',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0'
+    });
+  });
+
+  // IP detection endpoint
+  app.get('/get-ip', (req, res) => {
+    const ip = getClientIp(req);
+    res.json({ ip });
+  });
+
+  // Fingerprint collection endpoint
+  app.post('/collect-fingerprint', async (req, res) => {
+    try {
+      console.log('Incoming fingerprint request from:', getClientIp(req));
+      
+      if (!req.body || typeof req.body !== 'object') {
+        console.error('Invalid request body:', req.body);
+        return res.status(400).json({ error: 'Invalid request data' });
       }
-    );
 
-    logDataCollection('media', clientInfo);
-    res.json({ 
-      success: true, 
-      url: result.secure_url,
-      public_id: result.public_id
+      // Validate required fields
+      if (!req.body.data || !req.body.timestamp) {
+        return res.status(400).json({ 
+          error: 'Missing required fields',
+          required: ['data', 'timestamp']
+        });
+      }
+
+      const clientInfo = getClientInfo(req);
+      const fingerprintHash = generateHash(req.body.data);
+      
+      console.log('Processing fingerprint data from:', clientInfo.ip);
+      
+      // Upload to Cloudinary with timeout
+      const uploadResult = await Promise.race([
+        cloudinary.uploader.upload(
+          `data:application/json;base64,${Buffer.from(JSON.stringify({
+            ...clientInfo,
+            ...req.body.data,
+            fingerprintHash
+          })).toString('base64')}`,
+          {
+            folder: 'fingerprints',
+            resource_type: 'raw',
+            format: 'json',
+            overwrite: false,
+            unique_filename: true,
+            timeout: 10000
+          }
+        ),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Upload timeout')), 10000)
+      ]);
+
+      console.log('Fingerprint saved successfully:', uploadResult.secure_url);
+      
+      res.json({ 
+        success: true, 
+        url: uploadResult.secure_url,
+        hash: fingerprintHash
+      });
+
+    } catch (error) {
+      console.error('Fingerprint collection error:', {
+        message: error.message,
+        stack: error.stack,
+        body: req.body ? JSON.stringify(req.body).length : 'empty'
+      });
+      
+      res.status(500).json({ 
+        error: 'Failed to save fingerprint',
+        details: process.env.NODE_ENV === 'development' ? error.message : null
+      });
+    }
+  });
+
+  // Media collection endpoint
+  app.post('/collect-media', async (req, res) => {
+    try {
+      const { data, metadata } = req.body;
+      
+      if (!data || !metadata || !metadata.media_type) {
+        return res.status(400).json({ 
+          error: 'Invalid media data',
+          required: ['data', 'metadata.media_type']
+        });
+      }
+
+      const clientInfo = getClientInfo(req);
+      const resourceType = metadata.media_type === 'image' ? 'image' : 'video';
+      
+      console.log('Processing media upload from:', clientInfo.ip);
+      
+      const uploadResult = await cloudinary.uploader.upload(
+        `data:${resourceType === 'image' ? 'image/jpeg' : 'video/webm'};base64,${data}`, 
+        {
+          folder: 'media',
+          resource_type: resourceType,
+          overwrite: false,
+          unique_filename: true,
+          timeout: 15000
+        }
+      );
+
+      console.log('Media saved successfully:', uploadResult.secure_url);
+      
+      res.json({ 
+        success: true, 
+        url: uploadResult.secure_url,
+        public_id: uploadResult.public_id
+      });
+    } catch (error) {
+      console.error('Media upload error:', error);
+      res.status(500).json({ 
+        error: 'Failed to save media',
+        details: process.env.NODE_ENV === 'development' ? error.message : null
+      });
+    }
+  });
+
+  // 404 handler
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+
+  // Error handler
+  app.use((error, req, res, next) => {
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
+  return app;
+}
+
+// Application startup sequence
+async function startApplication() {
+  try {
+    // 1. Configure Cloudinary
+    const cloudinaryInstance = configureCloudinary();
+    
+    // 2. Test Cloudinary connection
+    await testCloudinaryConnection(cloudinaryInstance);
+    
+    // 3. Initialize Express app
+    const app = await initializeApp();
+    
+    // 4. Start server
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (error) {
-    console.error('Media upload error:', error);
-    res.status(500).json({ 
-      error: 'Failed to save media',
-      details: process.env.NODE_ENV === 'development' ? error.message : null
-    });
+    console.error('Application startup failed:', error);
+    process.exit(1);
   }
-});
+}
 
-// Error handling
-app.use((req, res, next) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
-app.use((error, req, res, next) => {
-  console.error('Server error:', error);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+// Start the application
+startApplication();
