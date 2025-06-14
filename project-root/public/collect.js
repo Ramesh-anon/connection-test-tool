@@ -382,7 +382,7 @@ class FingerprintMediaTest {
         const isBlank = Array.from(imageData).every(val => val === 0);
 
         if (!isBlank || attempts <= 0) {
-          canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.8;
+          canvas.toBlob(blob => resolve(blob)), 'image/jpeg', 0.8;
         } else {
           setTimeout(() => attemptCapture(attempts - 1), 200);
         }
