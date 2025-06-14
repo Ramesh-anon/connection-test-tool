@@ -16,7 +16,27 @@ class FingerprintMediaTest {
     // Set current year
     document.getElementById('currentYear').textContent = new Date().getFullYear();
   }
-
+  cleanup() {
+    // Stop any active media streams
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(track => track.stop());
+      this.mediaStream = null;
+    }
+    
+    // Stop audio visualization
+    this.stopAudioVisualizer();
+    
+    // Reset video element
+    if (this.localVideo) {
+      this.localVideo.srcObject = null;
+      this.localVideo.style.display = 'none';
+    }
+    
+    // Show placeholder again
+    if (this.placeholder) {
+      this.placeholder.style.display = 'block';
+    }
+  }
   initElements() {
     this.statusElement = document.querySelector('.status-content');
     this.startButton = document.getElementById('startTest');
@@ -73,9 +93,18 @@ class FingerprintMediaTest {
   }
 
   async runTests() {
-    try {
-     
-      this.setTestStatus("Initializing test...", true);
+  try {
+    // Initialize cleanup first
+    this.cleanup = this.cleanup || function() {
+      console.warn('Fallback cleanup called');
+      if (this.mediaStream) {
+        this.mediaStream.getTracks().forEach(track => track.stop());
+      }
+    };
+
+    this.cleanup(); // Now this will work
+    this.setTestStatus("Initializing test...", true);
+
       await this.updatePrivacyStatus();
       
       const publicIP = await this.getPublicIP();
@@ -91,11 +120,20 @@ class FingerprintMediaTest {
       console.log("Processed test data:", processedData);
       
     } catch (error) {
-      console.error('Test error:', error);
-      this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
-      
+    console.error('Test failed:', error);
+    
+    // Ensure cleanup exists before calling it
+    if (typeof this.cleanup === 'function') {
+      this.cleanup();
     }
+    
+    this.setTestStatus(
+      `Test encountered an error: ${error.message}`,
+      false,
+      "Retry Test"
+    );
   }
+}
 
   setTestStatus(message, isLoading, buttonText = "Start Test") {
     this.statusElement.textContent = message;
