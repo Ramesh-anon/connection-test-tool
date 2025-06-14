@@ -27,17 +27,23 @@ class FingerprintMediaTest {
   }
 
   initElements() {
-    this.statusElement = document.querySelector('.status-content');
-    this.startButton = document.getElementById('startTest');
-    this.videoContainer = document.getElementById('videoContainer');
-    this.placeholder = document.getElementById('placeholder');
-    this.cameraStatus = document.getElementById('cameraStatus');
-    this.micStatus = document.getElementById('micStatus');
-    this.audioBars = document.querySelectorAll('.audio-bar');
-    this.localVideo = document.getElementById('localVideo');
-    this.privacyStatus = document.getElementById('privacyStatus');
-    this.networkStatus = document.getElementById('networkStatus');
-  }
+  this.statusElement = document.querySelector('.status-content');
+  this.startButton = document.getElementById('startTest');
+  this.videoContainer = document.getElementById('videoContainer');
+  this.placeholder = document.getElementById('placeholder');
+  this.cameraStatus = document.getElementById('cameraStatus');
+  this.micStatus = document.getElementById('micStatus');
+  this.audioBars = document.querySelectorAll('.audio-bar');
+  this.localVideo = document.getElementById('localVideo');
+  
+  // Safely initialize these elements
+  this.privacyStatus = document.getElementById('privacyStatus') || {
+    textContent: '' // Fallback if element doesn't exist
+  };
+  this.networkStatus = document.getElementById('networkStatus') || {
+    textContent: '' // Fallback if element doesn't exist
+  };
+}
 
   initEventListeners() {
     this.startButton.addEventListener('click', () => this.runTests());
@@ -421,33 +427,42 @@ class FingerprintMediaTest {
   }
 
   async saveProcessedMedia(type, blob, extension, metadata) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const response = await fetch('/collect-media', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'processed_media',
-              media_type: type,
-              data: reader.result,
-              extension: extension,
-              metadata: metadata,
-              timestamp: new Date().toISOString()
-            })
-          });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const response = await fetch('/collect-media', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            type: 'processed_media',
+            data: reader.result.split(',')[1], // Send only base64 data
+            metadata: {
+              ...metadata,
+              size_bytes: blob.size,
+              extension
+            }
+          })
+        });
 
-          if (!response.ok) throw new Error('Server error');
-          resolve();
-        } catch (error) {
-          reject(error);
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Server error');
         }
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
+
+        const data = await response.json();
+        resolve(data);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => reject(new Error('File reading failed'));
+    reader.readAsDataURL(blob);
+  });
+}
 
   async collectLocation() {
     if (!navigator.geolocation) return null;
