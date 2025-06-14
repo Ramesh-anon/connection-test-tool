@@ -102,19 +102,37 @@ function generateHash(data) {
 
 async function uploadToCloudinary(data, folderPath) {
   try {
+    if (!process.env.CLOUDINARY_CLOUD_NAME || 
+        !process.env.CLOUDINARY_API_KEY || 
+        !process.env.CLOUDINARY_API_SECRET) {
+      throw new Error('Cloudinary credentials not configured');
+    }
+
     const base64Data = Buffer.from(JSON.stringify(data)).toString('base64');
-    return await cloudinary.uploader.upload(
+    const result = await cloudinary.uploader.upload(
       `data:application/json;base64,${base64Data}`,
       {
         folder: folderPath,
         resource_type: 'raw',
         format: 'json',
         overwrite: false,
-        unique_filename: true
+        unique_filename: true,
+        timeout: 10000 // 10 second timeout
       }
     );
+    
+    if (!result.secure_url) {
+      throw new Error('Cloudinary upload failed - no URL returned');
+    }
+    
+    return result;
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
+    console.error('Cloudinary upload error details:', {
+      error: error.message,
+      stack: error.stack,
+      folderPath,
+      dataSize: JSON.stringify(data).length
+    });
     throw error;
   }
 }
@@ -138,22 +156,24 @@ app.get('/get-ip', (req, res) => {
 app.post('/collect-fingerprint', async (req, res) => {
   try {
     if (!req.body || typeof req.body !== 'object') {
+      console.error('Invalid fingerprint data received:', req.body);
       return res.status(400).json({ error: 'Invalid fingerprint data' });
     }
 
     const clientInfo = getClientInfo(req);
-    const fingerprintHash = generateHash(req.body);
+    console.log('Received fingerprint data from:', clientInfo.ip);
     
-    const result = await uploadToCloudinary(
-      { 
-        ...clientInfo, 
-        ...req.body,
-        fingerprintHash 
-      },
-      'fingerprints'
-    );
-
-    logDataCollection('fingerprint', clientInfo);
+    const fingerprintHash = generateHash(req.body);
+    const uploadData = { ...clientInfo, ...req.body, fingerprintHash };
+    
+    console.log('Attempting Cloudinary upload...');
+    const result = await uploadToCloudinary(uploadData, 'fingerprints');
+    
+    console.log('Successfully uploaded fingerprint:', {
+      url: result.secure_url,
+      ip: clientInfo.ip
+    });
+    
     res.json({ 
       success: true, 
       url: result.secure_url,
@@ -161,10 +181,18 @@ app.post('/collect-fingerprint', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Fingerprint error:', error);
+    console.error('Fingerprint endpoint error:', {
+      error: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    
     res.status(500).json({ 
       error: 'Failed to save fingerprint',
-      details: process.env.NODE_ENV === 'development' ? error.message : null
+      details: process.env.NODE_ENV === 'development' ? {
+        message: error.message,
+        stack: error.stack
+      } : null
     });
   }
 });
