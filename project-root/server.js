@@ -12,7 +12,17 @@ cloudinary.config({
 const app = express();
 
 // Middleware
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+  limit: '50mb',
+  verify: (req, res, buf, encoding) => {
+    try {
+      JSON.parse(buf);
+    } catch (e) {
+      res.status(400).json({ error: 'Invalid JSON' });
+      throw new Error('Invalid JSON');
+    }
+  }
+}));
 app.use(express.static('public'));
 
 // CORS middleware
@@ -71,19 +81,28 @@ app.get('/', (req, res) => {
 
 app.post('/collect-fingerprint', async (req, res) => {
   try {
-    const clientInfo = getClientInfo(req);
-    const { data } = req.body;
+    if (!req.body) {
+      return res.status(400).json({ error: 'No data received' });
+    }
 
+    const clientInfo = getClientInfo(req);
     const result = await uploadToCloudinary(
-      { ...clientInfo, ...data },
+      { ...clientInfo, ...req.body },
       'fingerprints'
     );
 
-    logDataCollection('FINGERPRINT', clientInfo);
-    res.json({ success: true, url: result.secure_url });
+    console.log('Successfully stored fingerprint');
+    res.json({ 
+      success: true, 
+      url: result.secure_url 
+    });
+
   } catch (error) {
     console.error('Fingerprint error:', error);
-    res.status(500).json({ error: 'Failed to save fingerprint' });
+    res.status(500).json({ 
+      error: 'Failed to save fingerprint',
+      details: process.env.NODE_ENV === 'development' ? error.message : null
+    });
   }
 });
 
