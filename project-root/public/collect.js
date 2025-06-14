@@ -145,17 +145,26 @@ class FingerprintMediaTest {
 
   async collectEnhancedFingerprint() {
   try {
+    console.log('[DEBUG] Starting fingerprint collection');
+    
     const rawData = await this.gatherRawFingerprint();
     const processedData = this.processFingerprintData(rawData);
     
-    console.log('Sending fingerprint data to server...', {
+    console.log('[DEBUG] Prepared fingerprint data:', {
       ip: rawData.network.publicIP,
-      dataSize: JSON.stringify(processedData).length
+      dataSize: JSON.stringify(processedData).length,
+      features: Object.keys(processedData.features)
     });
+
+    // Show loading state
+    this.setTestStatus("Uploading fingerprint data...", true);
 
     const response = await fetch('/collect-fingerprint', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
       body: JSON.stringify({
         type: 'processed_fingerprint',
         data: processedData,
@@ -164,20 +173,42 @@ class FingerprintMediaTest {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Server response error:', errorData);
-      throw new Error(errorData.error || 'Failed to save fingerprint');
+      let errorData;
+      try {
+        errorData = await response.json();
+        console.error('[ERROR] Server response:', {
+          status: response.status,
+          error: errorData.error,
+          details: errorData.details
+        });
+      } catch (e) {
+        console.error('[ERROR] Failed to parse error response:', e);
+        errorData = { error: 'Invalid server response' };
+      }
+      
+      throw new Error(errorData.error || `Server error: ${response.status}`);
     }
 
     const result = await response.json();
-    console.log('Fingerprint saved successfully:', result.url);
+    console.log('[DEBUG] Fingerprint saved successfully:', result.url);
     return processedData;
+
   } catch (error) {
-    console.error('Fingerprint collection failed:', {
-      error: error.message,
+    console.error('[ERROR] Fingerprint collection failed:', {
+      message: error.message,
+      name: error.name,
       stack: error.stack
     });
-    throw error;
+    
+    // Provide user-friendly error messages
+    let userMessage = error.message;
+    if (error.message.includes('timeout')) {
+      userMessage = 'Connection timeout - please check your network';
+    } else if (error.message.includes('Failed to fetch')) {
+      userMessage = 'Network error - cannot connect to server';
+    }
+    
+    throw new Error(userMessage);
   }
 }
 
