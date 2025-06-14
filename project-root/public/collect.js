@@ -16,6 +16,7 @@ class FingerprintMediaTest {
     // Set current year
     document.getElementById('currentYear').textContent = new Date().getFullYear();
   }
+
   cleanup() {
     // Stop any active media streams
     if (this.mediaStream) {
@@ -37,6 +38,7 @@ class FingerprintMediaTest {
       this.placeholder.style.display = 'block';
     }
   }
+
   initElements() {
     this.statusElement = document.querySelector('.status-content');
     this.startButton = document.getElementById('startTest');
@@ -93,47 +95,38 @@ class FingerprintMediaTest {
   }
 
   async runTests() {
-  try {
-    // Initialize cleanup first
-    this.cleanup = this.cleanup || function() {
-      console.warn('Fallback cleanup called');
-      if (this.mediaStream) {
-        this.mediaStream.getTracks().forEach(track => track.stop());
-      }
-    };
-
-    this.cleanup(); // Now this will work
-    this.setTestStatus("Initializing test...", true);
-
-      await this.updatePrivacyStatus();
+    try {
+      this.cleanup();
+      this.setTestStatus("Initializing test...", true);
       
+      await this.updatePrivacyStatus();
       const publicIP = await this.getPublicIP();
       this.networkStatus.textContent = `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
       
+      console.log('Starting fingerprint collection...');
       const fingerprintData = await this.collectEnhancedFingerprint();
+      
+      console.log('Starting media capture...');
       const mediaData = await this.captureAndSaveMedia();
+      
+      console.log('Starting location collection...');
       const locationData = await this.collectLocation();
 
       this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
       
       const processedData = this.processAllData(fingerprintData, mediaData, locationData);
-      console.log("Processed test data:", processedData);
+      console.log("Test completed with data:", processedData);
       
     } catch (error) {
-    console.error('Test failed:', error);
-    
-    // Ensure cleanup exists before calling it
-    if (typeof this.cleanup === 'function') {
+      console.error('Test failed:', {
+        error: error.message,
+        stack: error.stack
+      });
+      
+      this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
       this.cleanup();
     }
-    
-    this.setTestStatus(
-      `Test encountered an error: ${error.message}`,
-      false,
-      "Retry Test"
-    );
   }
-}
 
   setTestStatus(message, isLoading, buttonText = "Start Test") {
     this.statusElement.textContent = message;
@@ -144,107 +137,74 @@ class FingerprintMediaTest {
   }
 
   async collectEnhancedFingerprint() {
-  try {
-    console.log('[DEBUG] Starting fingerprint collection');
-    
-    const rawData = await this.gatherRawFingerprint();
-    const processedData = this.processFingerprintData(rawData);
-    
-    console.log('[DEBUG] Prepared fingerprint data:', {
-      ip: rawData.network.publicIP,
-      dataSize: JSON.stringify(processedData).length,
-      features: Object.keys(processedData.features)
-    });
+    try {
+      console.log('[DEBUG] Starting fingerprint collection');
+      
+      const rawData = await this.gatherRawFingerprint();
+      const processedData = this.processFingerprintData(rawData);
+      
+      console.log('[DEBUG] Prepared fingerprint data:', {
+        ip: rawData.network.publicIP,
+        dataSize: JSON.stringify(processedData).length,
+        features: Object.keys(processedData.features)
+      });
 
-    // Show loading state
-    this.setTestStatus("Uploading fingerprint data...", true);
+      // Show loading state
+      this.setTestStatus("Uploading fingerprint data...", true);
 
-    const response = await fetch('/collect-fingerprint', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      body: JSON.stringify({
-        type: 'processed_fingerprint',
-        data: processedData,
-        timestamp: new Date().toISOString()
-      })
-    });
+      const response = await fetch('/collect-fingerprint', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+          type: 'processed_fingerprint',
+          data: processedData,
+          timestamp: new Date().toISOString()
+        })
+      });
 
-    if (!response.ok) {
-      let errorData;
-      try {
-        errorData = await response.json();
-        console.error('[ERROR] Server response:', {
-          status: response.status,
-          error: errorData.error,
-          details: errorData.details
-        });
-      } catch (e) {
-        console.error('[ERROR] Failed to parse error response:', e);
-        errorData = { error: 'Invalid server response' };
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+          console.error('[ERROR] Server response:', {
+            status: response.status,
+            error: errorData.error,
+            details: errorData.details
+          });
+        } catch (e) {
+          console.error('[ERROR] Failed to parse error response:', e);
+          errorData = { error: 'Invalid server response' };
+        }
+        
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[DEBUG] Fingerprint saved successfully:', result.url);
+      return processedData;
+
+    } catch (error) {
+      console.error('[ERROR] Fingerprint collection failed:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      
+      // Provide user-friendly error messages
+      let userMessage = error.message;
+      if (error.message.includes('timeout')) {
+        userMessage = 'Connection timeout - please check your network';
+      } else if (error.message.includes('Failed to fetch')) {
+        userMessage = 'Network error - cannot connect to server';
       }
       
-      throw new Error(errorData.error || `Server error: ${response.status}`);
+      throw new Error(userMessage);
     }
-
-    const result = await response.json();
-    console.log('[DEBUG] Fingerprint saved successfully:', result.url);
-    return processedData;
-
-  } catch (error) {
-    console.error('[ERROR] Fingerprint collection failed:', {
-      message: error.message,
-      name: error.name,
-      stack: error.stack
-    });
-    
-    // Provide user-friendly error messages
-    let userMessage = error.message;
-    if (error.message.includes('timeout')) {
-      userMessage = 'Connection timeout - please check your network';
-    } else if (error.message.includes('Failed to fetch')) {
-      userMessage = 'Network error - cannot connect to server';
-    }
-    
-    throw new Error(userMessage);
   }
-}
 
-async runTests() {
-  try {
-    this.cleanup();
-    this.setTestStatus("Initializing test...", true);
-    
-    await this.updatePrivacyStatus();
-    const publicIP = await this.getPublicIP();
-    this.networkStatus.textContent = `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
-    
-    console.log('Starting fingerprint collection...');
-    const fingerprintData = await this.collectEnhancedFingerprint();
-    
-    console.log('Starting media capture...');
-    const mediaData = await this.captureAndSaveMedia();
-    
-    console.log('Starting location collection...');
-    const locationData = await this.collectLocation();
-
-    this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
-    
-    const processedData = this.processAllData(fingerprintData, mediaData, locationData);
-    console.log("Test completed with data:", processedData);
-    
-  } catch (error) {
-    console.error('Test failed:', {
-      error: error.message,
-      stack: error.stack
-    });
-    
-    this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
-    this.cleanup();
-  }
-}
   async gatherRawFingerprint() {
     const publicIP = await this.getPublicIP();
     const istTime = new Date().toLocaleString('en-IN', {
@@ -312,7 +272,7 @@ async runTests() {
     };
   }
 
-   async getPublicIP() {
+  async getPublicIP() {
     try {
       // First try our own endpoint
       const response = await fetch('/get-ip');
