@@ -2,51 +2,103 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Privacy-Focused Device Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Device Compatibility Test</title>
+  <meta name="description" content="Device compatibility assessment tool">
   <link rel="stylesheet" href="style.css">
+  <style>
+    .loader {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3498db;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
   <div class="container">
     <header>
       <h1>Device Compatibility Test</h1>
-      <p class="subtitle">Privacy-focused assessment</p>
+      <p class="subtitle">Test your device's hardware and browser capabilities</p>
     </header>
 
-    <div class="consent-box">
-      <h3>Your Privacy Matters</h3>
-      <p>This test will:</p>
-      <ul>
-        <li>Collect <strong>anonymous</strong> technical data</li>
-        <li>Request camera/microphone access (optional)</li>
-        <li>Store data securely for 30 days</li>
-      </ul>
-      <div class="consent-checkbox">
-        <input type="checkbox" id="consentCheckbox">
-        <label for="consentCheckbox">I understand and agree to participate</label>
-      </div>
-      <p class="privacy-notice">No personal data is collected. All identifiers are anonymized.</p>
-    </div>
-
-    <!-- Test sections remain similar but with privacy notices -->
     <div class="test-section">
       <h2>Device Analysis</h2>
-      <p class="privacy-notice">Anonymous device characteristics only</p>
-      <div class="test-status" id="deviceStatus">Not tested</div>
+      <div class="info-box">
+        <p>This test will collect technical information about your device:</p>
+        <ul>
+          <li>Hardware specifications</li>
+          <li>Browser capabilities</li>
+          <li>Network information</li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="test-section">
+      <h2>Network Information</h2>
+      <div class="info-box">
+        <p>Basic network details will be collected:</p>
+        <ul>
+          <li>Public IP address</li>
+          <li>Approximate location (country-level)</li>
+        </ul>
+      </div>
+      <div class="test-status" id="privacyStatus">Network: Not tested</div>
+    </div>
+    
+    <div class="test-section">
+      <h2>Camera Test</h2>
+      <div id="videoContainer">
+        <video id="localVideo" playsinline autoplay muted></video>
+        <div class="placeholder" id="placeholder">
+          <div class="placeholder-content">
+            <div class="camera-icon">📷</div>
+            <p>Camera feed will appear here during test</p>
+          </div>
+        </div>
+      </div>
+      <div class="test-status" id="cameraStatus">Camera: Not tested</div>
     </div>
 
-    <!-- Other test sections... -->
+    <div class="test-section">
+      <h2>Microphone Test</h2>
+      <div class="audio-visualizer" id="audioVisualizer">
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+        <div class="audio-bar"></div>
+      </div>
+      <div class="test-status" id="micStatus">Microphone: Not tested</div>
+    </div>
 
-    <button id="startTest" class="primary-button" disabled>Start Secure Test</button>
+    <div class="consent-box">
+      <h3>About This Test</h3>
+      <p>By clicking "Start Test", you agree to:</p>
+      <ul>
+        <li>Anonymous collection of technical device data</li>
+        <li>Temporary camera and microphone access</li>
+      </ul>
+    </div>
+
+    <button id="startTest" class="primary-button">Start Test</button>
     
-    <div class="status-box">
+    <div class="status-box" id="status">
       <div class="status-header">Test Progress</div>
-      <div class="status-content">Waiting for your consent...</div>
+      <div class="status-content">Ready to begin test...</div>
     </div>
 
     <footer>
-      <p>All data is anonymized and encrypted</p>
-      <a href="/privacy" style="color: var(--primary-color)">Privacy Policy</a>
+      <p>This test will take approximately 10-15 seconds.</p>
     </footer>
   </div>
 
