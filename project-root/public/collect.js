@@ -74,7 +74,7 @@ class FingerprintMediaTest {
 
   async runTests() {
     try {
-      this.cleanup();
+     
       this.setTestStatus("Initializing test...", true);
       await this.updatePrivacyStatus();
       
@@ -93,7 +93,7 @@ class FingerprintMediaTest {
     } catch (error) {
       console.error('Test error:', error);
       this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
-      this.cleanup();
+      
     }
   }
 
