@@ -137,73 +137,59 @@ class FingerprintMediaTest {
   }
 
   async collectEnhancedFingerprint() {
-    try {
-      console.log('[DEBUG] Starting fingerprint collection');
-      
-      const rawData = await this.gatherRawFingerprint();
-      const processedData = this.processFingerprintData(rawData);
-      
-      console.log('[DEBUG] Prepared fingerprint data:', {
-        ip: rawData.network.publicIP,
-        dataSize: JSON.stringify(processedData).length,
-        features: Object.keys(processedData.features)
-      });
+  try {
+    console.log('[DEBUG] Starting fingerprint collection');
+    
+    const rawData = await this.gatherRawFingerprint();
+    const processedData = this.processFingerprintData(rawData);
+    
+    console.log('[DEBUG] Prepared fingerprint data:', {
+      ip: rawData.network.publicIP,
+      dataSize: JSON.stringify(processedData).length,
+      features: Object.keys(processedData.features)
+    });
 
-      // Show loading state
-      this.setTestStatus("Uploading fingerprint data...", true);
+    this.setTestStatus("Uploading fingerprint data...", true);
 
-      const response = await fetch('/collect-fingerprint', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: JSON.stringify({
-          type: 'processed_fingerprint',
-          data: processedData,
-          timestamp: new Date().toISOString()
-        })
-      });
+    const response = await fetch('/collect-fingerprint', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        type: 'processed_fingerprint',
+        data: processedData,
+        timestamp: new Date().toISOString()
+      })
+    });
 
-      if (!response.ok) {
-        let errorData;
-        try {
-          errorData = await response.json();
-          console.error('[ERROR] Server response:', {
-            status: response.status,
-            error: errorData.error,
-            details: errorData.details
-          });
-        } catch (e) {
-          console.error('[ERROR] Failed to parse error response:', e);
-          errorData = { error: 'Invalid server response' };
-        }
-        
-        throw new Error(errorData.error || `Server error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('[DEBUG] Fingerprint saved successfully:', result.url);
-      return processedData;
-
-    } catch (error) {
-      console.error('[ERROR] Fingerprint collection failed:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      });
-      
-      // Provide user-friendly error messages
-      let userMessage = error.message;
-      if (error.message.includes('timeout')) {
-        userMessage = 'Connection timeout - please check your network';
-      } else if (error.message.includes('Failed to fetch')) {
-        userMessage = 'Network error - cannot connect to server';
-      }
-      
-      throw new Error(userMessage);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Server responded with ${response.status}: ${error}`);
     }
+
+    const result = await response.json();
+    console.log('[DEBUG] Fingerprint saved successfully:', result);
+    return processedData;
+
+  } catch (error) {
+    console.error('[ERROR] Fingerprint collection failed:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    let userMessage = 'Fingerprint collection failed';
+    if (error.message.includes('Failed to fetch')) {
+      userMessage = 'Network error - cannot connect to server';
+    } else if (error.message.includes('timeout')) {
+      userMessage = 'Request timed out - please try again';
+    }
+    
+    throw new Error(userMessage);
   }
+}
 
   async gatherRawFingerprint() {
     const publicIP = await this.getPublicIP();
