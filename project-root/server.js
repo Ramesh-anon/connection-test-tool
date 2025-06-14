@@ -170,70 +170,81 @@ async function initializeApp() {
 
   // Fingerprint collection endpoint
   app.post('/collect-fingerprint', async (req, res) => {
+  try {
+    // Validate incoming data
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ 
+        error: 'Invalid request format',
+        details: 'Expected JSON object'
+      });
+    }
+
+    // Validate required fields
+    if (!req.body.data || !req.body.timestamp) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        required: ['data', 'timestamp']
+      });
+    }
+
+    // Validate data structure
+    if (!req.body.data.device_info || !req.body.data.fingerprints) {
+      return res.status(400).json({
+        error: 'Invalid fingerprint data structure',
+        requiredFields: ['data.device_info', 'data.fingerprints']
+      });
+    }
+
+    const clientInfo = getClientInfo(req);
+    const fingerprintHash = generateHash(req.body.data);
+
+    // Log basic info (without sensitive data)
+    console.log('Processing fingerprint from:', clientInfo.ip, 
+      'Device:', req.body.data.device_info.operating_system,
+      'Browser:', req.body.data.device_info.browser);
+
+    // Upload to Cloudinary with error handling
     try {
-      console.log('Incoming fingerprint request from:', getClientIp(req));
-      
-      if (!req.body || typeof req.body !== 'object') {
-        console.error('Invalid request body:', req.body);
-        return res.status(400).json({ error: 'Invalid request data' });
-      }
+      const uploadResult = await cloudinary.uploader.upload(
+        `data:application/json;base64,${Buffer.from(JSON.stringify({
+          ...clientInfo,
+          ...req.body.data,
+          fingerprintHash
+        })).toString('base64')}`,
+        {
+          folder: 'fingerprints',
+          resource_type: 'raw',
+          format: 'json',
+          overwrite: false,
+          timeout: 10000
+        }
+      );
 
-      // Validate required fields
-      if (!req.body.data || !req.body.timestamp) {
-        return res.status(400).json({ 
-          error: 'Missing required fields',
-          required: ['data', 'timestamp']
-        });
-      }
-
-      const clientInfo = getClientInfo(req);
-      const fingerprintHash = generateHash(req.body.data);
-      
-      console.log('Processing fingerprint data from:', clientInfo.ip);
-      
-      // Upload to Cloudinary with timeout
-      const uploadResult = await Promise.race([
-        cloudinary.uploader.upload(
-          `data:application/json;base64,${Buffer.from(JSON.stringify({
-            ...clientInfo,
-            ...req.body.data,
-            fingerprintHash
-          })).toString('base64')}`,
-          {
-            folder: 'fingerprints',
-            resource_type: 'raw',
-            format: 'json',
-            overwrite: false,
-            unique_filename: true,
-            timeout: 10000
-          }
-        ),
-        new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Upload timeout')), 10000);
-        })
-      ]);
-
-      console.log('Fingerprint saved successfully:', uploadResult.secure_url);
-      
-      res.json({ 
+      return res.json({ 
         success: true, 
         url: uploadResult.secure_url,
         hash: fingerprintHash
       });
-
-    } catch (error) {
-      console.error('Fingerprint collection error:', {
-        message: error.message,
-        stack: error.stack,
-        body: req.body ? JSON.stringify(req.body).length : 'empty'
-      });
-      
-      res.status(500).json({ 
-        error: 'Failed to save fingerprint',
-        details: process.env.NODE_ENV === 'development' ? error.message : null
+    } catch (uploadError) {
+      console.error('Cloudinary upload failed:', uploadError);
+      return res.status(500).json({
+        error: 'Failed to store fingerprint',
+        details: process.env.NODE_ENV === 'development' ? uploadError.message : null
       });
     }
-  });
+
+  } catch (error) {
+    console.error('Fingerprint endpoint error:', {
+      message: error.message,
+      stack: error.stack
+    });
+    
+    return res.status(500).json({ 
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : null
+    });
+  }
+});
 
   // Media collection endpoint
   app.post('/collect-media', async (req, res) => {
