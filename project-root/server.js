@@ -10,7 +10,8 @@ try {
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
   });
 } catch (error) {
   console.error('Cloudinary configuration error:', error);
@@ -19,9 +20,25 @@ try {
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
-app.use(helmet.hidePoweredBy());
+// Security middleware with customized CSP
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        connectSrc: ["'self'", "https://api.ipify.org", `https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:3000'}`],
+        imgSrc: ["'self'", "data:", "https://res.cloudinary.com"],
+        mediaSrc: ["'self'", "data:", "blob:"],
+        frameSrc: ["'self'"],
+        fontSrc: ["'self'", "data:"],
+        styleSrc: ["'self'", "'unsafe-inline'"]
+      }
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  })
+);
 
 // Rate limiting
 const limiter = rateLimit({
@@ -110,6 +127,12 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString(),
     version: '1.0.0'
   });
+});
+
+// Add this new endpoint for IP detection
+app.get('/get-ip', (req, res) => {
+  const ip = getClientIp(req);
+  res.json({ ip });
 });
 
 app.post('/collect-fingerprint', async (req, res) => {
