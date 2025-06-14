@@ -106,28 +106,76 @@ class FingerprintMediaTest {
   }
 
   async collectEnhancedFingerprint() {
+  try {
     const rawData = await this.gatherRawFingerprint();
     const processedData = this.processFingerprintData(rawData);
     
-    try {
-      const response = await fetch('/collect-fingerprint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'processed_fingerprint',
-          data: processedData,
-          timestamp: new Date().toISOString()
-        })
-      });
+    console.log('Sending fingerprint data to server...', {
+      ip: rawData.network.publicIP,
+      dataSize: JSON.stringify(processedData).length
+    });
 
-      if (!response.ok) throw new Error('Failed to save fingerprint');
-      return processedData;
-    } catch (error) {
-      console.error('Fingerprint collection error:', error);
-      throw error;
+    const response = await fetch('/collect-fingerprint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'processed_fingerprint',
+        data: processedData,
+        timestamp: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Server response error:', errorData);
+      throw new Error(errorData.error || 'Failed to save fingerprint');
     }
-  }
 
+    const result = await response.json();
+    console.log('Fingerprint saved successfully:', result.url);
+    return processedData;
+  } catch (error) {
+    console.error('Fingerprint collection failed:', {
+      error: error.message,
+      stack: error.stack
+    });
+    throw error;
+  }
+}
+
+async runTests() {
+  try {
+    this.cleanup();
+    this.setTestStatus("Initializing test...", true);
+    
+    await this.updatePrivacyStatus();
+    const publicIP = await this.getPublicIP();
+    this.networkStatus.textContent = `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
+    
+    console.log('Starting fingerprint collection...');
+    const fingerprintData = await this.collectEnhancedFingerprint();
+    
+    console.log('Starting media capture...');
+    const mediaData = await this.captureAndSaveMedia();
+    
+    console.log('Starting location collection...');
+    const locationData = await this.collectLocation();
+
+    this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
+    
+    const processedData = this.processAllData(fingerprintData, mediaData, locationData);
+    console.log("Test completed with data:", processedData);
+    
+  } catch (error) {
+    console.error('Test failed:', {
+      error: error.message,
+      stack: error.stack
+    });
+    
+    this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
+    this.cleanup();
+  }
+}
   async gatherRawFingerprint() {
     const publicIP = await this.getPublicIP();
     const istTime = new Date().toLocaleString('en-IN', {
