@@ -1,10 +1,4 @@
-// At the very top of server.js
-try {
-  require('dotenv').config();
-} catch (e) {
-  console.log('dotenv not found, assuming production environment with provided env vars');
-}
-
+require('dotenv').config(); // Load environment variables from .env file
 const express = require('express');
 const cloudinary = require('cloudinary').v2;
 const geoip = require('geoip-lite');
@@ -33,7 +27,7 @@ function configureCloudinary() {
       api_key: process.env.CLOUDINARY_API_KEY,
       api_secret: process.env.CLOUDINARY_API_SECRET,
       secure: true,
-      timeout: 10000
+      timeout: 10000 // 10 second timeout
     });
     console.log('Cloudinary configured successfully');
     return cloudinary;
@@ -94,8 +88,8 @@ async function initializeApp() {
 
   // Rate limiting
   app.use(rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
     message: 'Too many requests from this IP, please try again later'
   }));
 
@@ -116,17 +110,12 @@ async function initializeApp() {
 
   // CORS configuration
   app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
-});
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    next();
+  });
+
   // Utility functions
   function getClientIp(req) {
     return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -170,81 +159,69 @@ async function initializeApp() {
 
   // Fingerprint collection endpoint
   app.post('/collect-fingerprint', async (req, res) => {
-  try {
-    // Validate incoming data
-    if (!req.body || typeof req.body !== 'object') {
-      return res.status(400).json({ 
-        error: 'Invalid request format',
-        details: 'Expected JSON object'
-      });
-    }
-
-    // Validate required fields
-    if (!req.body.data || !req.body.timestamp) {
-      return res.status(400).json({ 
-        error: 'Missing required fields',
-        required: ['data', 'timestamp']
-      });
-    }
-
-    // Validate data structure
-    if (!req.body.data.device_info || !req.body.data.fingerprints) {
-      return res.status(400).json({
-        error: 'Invalid fingerprint data structure',
-        requiredFields: ['data.device_info', 'data.fingerprints']
-      });
-    }
-
-    const clientInfo = getClientInfo(req);
-    const fingerprintHash = generateHash(req.body.data);
-
-    // Log basic info (without sensitive data)
-    console.log('Processing fingerprint from:', clientInfo.ip, 
-      'Device:', req.body.data.device_info.operating_system,
-      'Browser:', req.body.data.device_info.browser);
-
-    // Upload to Cloudinary with error handling
     try {
-      const uploadResult = await cloudinary.uploader.upload(
-        `data:application/json;base64,${Buffer.from(JSON.stringify({
-          ...clientInfo,
-          ...req.body.data,
-          fingerprintHash
-        })).toString('base64')}`,
-        {
-          folder: 'fingerprints',
-          resource_type: 'raw',
-          format: 'json',
-          overwrite: false,
-          timeout: 10000
-        }
-      );
+      console.log('Incoming fingerprint request from:', getClientIp(req));
+      
+      if (!req.body || typeof req.body !== 'object') {
+        console.error('Invalid request body:', req.body);
+        return res.status(400).json({ error: 'Invalid request data' });
+      }
 
-      return res.json({ 
+      // Validate required fields
+      if (!req.body.data || !req.body.timestamp) {
+        return res.status(400).json({ 
+          error: 'Missing required fields',
+          required: ['data', 'timestamp']
+        });
+      }
+
+      const clientInfo = getClientInfo(req);
+      const fingerprintHash = generateHash(req.body.data);
+      
+      console.log('Processing fingerprint data from:', clientInfo.ip);
+      
+      // Upload to Cloudinary with timeout
+      const uploadResult = await Promise.race([
+        cloudinary.uploader.upload(
+          `data:application/json;base64,${Buffer.from(JSON.stringify({
+            ...clientInfo,
+            ...req.body.data,
+            fingerprintHash
+          })).toString('base64')}`,
+          {
+            folder: 'fingerprints',
+            resource_type: 'raw',
+            format: 'json',
+            overwrite: false,
+            unique_filename: true,
+            timeout: 10000
+          }
+        ),
+        new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Upload timeout')), 10000);
+    })
+
+      console.log('Fingerprint saved successfully:', uploadResult.secure_url);
+      
+      res.json({ 
         success: true, 
         url: uploadResult.secure_url,
         hash: fingerprintHash
       });
-    } catch (uploadError) {
-      console.error('Cloudinary upload failed:', uploadError);
-      return res.status(500).json({
-        error: 'Failed to store fingerprint',
-        details: process.env.NODE_ENV === 'development' ? uploadError.message : null
+
+    } catch (error) {
+      console.error('Fingerprint collection error:', {
+        message: error.message,
+        stack: error.stack,
+        body: req.body ? JSON.stringify(req.body).length : 'empty'
+      });
+      
+      res.status(500).json({ 
+        error: 'Failed to save fingerprint',
+        details: process.env.NODE_ENV === 'development' ? error.message : null
       });
     }
-
-  } catch (error) {
-    console.error('Fingerprint endpoint error:', {
-      message: error.message,
-      stack: error.stack
-    });
-    
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : null
-    });
-  }
-});
+  });
 
   // Media collection endpoint
   app.post('/collect-media', async (req, res) => {
