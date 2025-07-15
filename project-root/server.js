@@ -211,11 +211,7 @@ async function initializeApp() {
       });
 
     } catch (error) {
-      console.error('Fingerprint collection error:', {
-        message: error.message,
-        stack: error.stack,
-        body: req.body ? JSON.stringify(req.body).length : 'empty'
-      });
+      console.error('[ERROR] Fingerprint collection failed:', error.message, error);
       
       res.status(500).json({ 
         error: 'Failed to save fingerprint',
