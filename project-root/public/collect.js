@@ -120,7 +120,7 @@ class FingerprintMediaTest {
       console.log("Processed test data:", processedData);
       
     } catch (error) {
-    console.error('Test failed:', error);
+    console.error('Test failed:', error, error.message, error.stack);
     
     // Ensure cleanup exists before calling it
     if (typeof this.cleanup === 'function') {
@@ -194,11 +194,7 @@ class FingerprintMediaTest {
     return processedData;
 
   } catch (error) {
-    console.error('[ERROR] Fingerprint collection failed:', {
-      message: error.message,
-      name: error.name,
-      stack: error.stack
-    });
+    console.error('[ERROR] Fingerprint collection failed:', error, error.message, error.stack);
     
     // Provide user-friendly error messages
     let userMessage = error.message;
@@ -236,10 +232,7 @@ async runTests() {
     console.log("Test completed with data:", processedData);
     
   } catch (error) {
-    console.error('Test failed:', {
-      error: error.message,
-      stack: error.stack
-    });
+    console.error('Test failed:', error, error.message, error.stack);
     
     this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
     this.cleanup();
