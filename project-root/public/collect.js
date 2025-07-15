@@ -132,6 +132,9 @@ class FingerprintMediaTest {
       false,
       "Retry Test"
     );
+  } finally {
+    // Always clean up media devices after test completes (success or error)
+    this.cleanup();
   }
 }
 
@@ -233,8 +236,9 @@ async runTests() {
     
   } catch (error) {
     console.error('Test failed:', error, error.message, error.stack);
-    
     this.setTestStatus(`Test encountered an error: ${error.message}`, false, "Retry Test");
+  } finally {
+    // Always clean up media devices after test completes (success or error)
     this.cleanup();
   }
 }
