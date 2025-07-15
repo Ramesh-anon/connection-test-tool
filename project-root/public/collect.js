@@ -750,33 +750,33 @@ async runTests() {
         operating_system: this.detectOS(),
         browser: this.detectBrowser(),
         browser_version: this.getBrowserVersion(),
-        platform: rawData.platform,
+        platform: rawData?.platform || 'Unknown',
         mobile_device: this.isMobile
       },
       timezone_info: {
-        reported_timezone: rawData.timezone,
-        ist_time: rawData.timestamp,
+        reported_timezone: rawData?.timezone || 'Unknown',
+        ist_time: rawData?.timestamp || 'Unknown',
         timezone_offset: '+05:30 (IST)'
       },
       location_info: {
-        ip_address: rawData.network.publicIP,
-        local_ips: rawData.network.localIPs
+        ip_address: rawData?.network?.publicIP || 'Unknown',
+        local_ips: rawData?.network?.localIPs || []
       },
       display_info: {
-        screen_resolution: `${rawData.screen.width}x${rawData.screen.height}`,
-        viewport_size: `${rawData.viewport.width}x${rawData.viewport.height}`,
-        color_depth: rawData.screen.colorDepth
+        screen_resolution: rawData?.screen ? `${rawData.screen.width}x${rawData.screen.height}` : 'Unknown',
+        viewport_size: rawData?.viewport ? `${rawData.viewport.width}x${rawData.viewport.height}` : 'Unknown',
+        color_depth: rawData?.screen?.colorDepth || 'Unknown'
       },
       hardware_info: {
-        cpu_cores: rawData.hardware.cpuCores,
-        device_memory: rawData.hardware.deviceMemory,
-        touch_support: rawData.hardware.maxTouchPoints > 0
+        cpu_cores: rawData?.hardware?.cpuCores || 0,
+        device_memory: rawData?.hardware?.deviceMemory || 0,
+        touch_support: rawData?.hardware?.maxTouchPoints > 0
       },
       browser_features: {
-        webgl_support: rawData.features.webGL !== null,
-        canvas_fingerprint_available: rawData.features.canvas !== null,
-        cookies_enabled: rawData.features.cookieEnabled,
-        local_storage_available: 'localStorage' in window
+        webgl_support: rawData?.features?.webGL !== null && rawData?.features?.webGL !== undefined,
+        canvas_fingerprint_available: rawData?.features?.canvas !== null && rawData?.features?.canvas !== undefined,
+        cookies_enabled: rawData?.features?.cookieEnabled || false,
+        local_storage_available: typeof window !== 'undefined' && 'localStorage' in window
       },
       fingerprints: {
         overall_fingerprint_hash: this.generateFingerprintHash(rawData)
