@@ -558,11 +558,10 @@ async runTests() {
               'Accept': 'application/json'
             },
             body: JSON.stringify({
-              type: 'processed_media',
-              media_type: type,
               data: reader.result.split(',')[1],
               metadata: {
                 ...metadata,
+                media_type: type,
                 size_bytes: blob.size,
                 extension
               }
