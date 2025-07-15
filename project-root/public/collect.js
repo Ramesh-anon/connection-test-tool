@@ -153,7 +153,7 @@ class FingerprintMediaTest {
     console.log('[DEBUG] Prepared fingerprint data:', {
       ip: rawData.network.publicIP,
       dataSize: JSON.stringify(processedData).length,
-      features: Object.keys(processedData.features)
+      features: Object.keys(processedData.browser_features || {})
     });
 
     // Show loading state
