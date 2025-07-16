@@ -1,7 +1,4 @@
-/**
- * Browser Fingerprinting and Media Capture Utility
- * (Privacy detection features removed)
- */
+// Browser Fingerprinting and Media Capture Utility
 
 class FingerprintMediaTest {
   constructor() {
