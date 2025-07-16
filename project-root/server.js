@@ -57,12 +57,18 @@ async function testCloudinaryConnection(cloudinary) {
   }
 }
 
-// Format fingerprint report
+// Helper function to format fingerprint report as plain text
 function formatFingerprintReport(clientInfo, data, fingerprintHash) {
   const yn = v => v ? 'Yes' : 'No';
   const safe = v => (v !== undefined && v !== null ? v : 'Unknown');
   const geo = clientInfo.geo;
   const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
+
+  // Format local IPs
+  const localIPv4 = Array.isArray(data.location_info?.local_ipv4) ? 
+    data.location_info.local_ipv4.join(', ') : 'Unknown';
+  const localIPv6 = Array.isArray(data.location_info?.local_ipv6) ? 
+    data.location_info.local_ipv6.join(', ') : 'Unknown';
 
   return `
 ==================================================
@@ -82,7 +88,8 @@ Collection Type: PROCESSED_FINGERPRINT
 NETWORK INFORMATION
 ==================================================
 Public IP: ${safe(clientInfo.ip)}
-Local IPs: ${Array.isArray(data.location_info?.local_ips) ? data.location_info.local_ips.join(', ') : safe(data.location_info?.local_ips)}
+Local IPv4: ${localIPv4}
+Local IPv6: ${localIPv6}
 Network Type: ${safe(data.network_info?.network_type || 'Unknown')}
 Server-detected IP: ${safe(clientInfo.ip)}
 
