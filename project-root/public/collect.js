@@ -266,6 +266,7 @@ async runTests() {
       hour12: true
     });
     const coords = await this.collectLocation();
+    const incognitoResult = await this.detectIncognitoMode();
     return {
       userAgent: navigator.userAgent,
       platform: navigator.platform,
@@ -318,7 +319,9 @@ async runTests() {
         vendor: navigator.vendor,
         product: navigator.product,
         webdriver: navigator.webdriver
-      }
+      },
+      incognito: incognitoResult.isIncognito,
+      incognitoDetectionMethod: incognitoResult.detectionMethod
     };
   }
 
@@ -790,6 +793,10 @@ async runTests() {
         cookies_enabled: rawData?.features?.cookieEnabled || false,
         local_storage_available: typeof window !== 'undefined' && 'localStorage' in window
       },
+      privacy_info: {
+        incognito: rawData.incognito,
+        incognitoDetectionMethod: rawData.incognitoDetectionMethod
+      },
       fingerprints: {
         overall_fingerprint_hash: this.generateFingerprintHash(rawData)
       }
@@ -931,6 +938,61 @@ async runTests() {
     // Method 3: Try using iframe tricks
     // Note: These methods may have limited success and ethical considerations
     return ['Not available (all methods blocked)'];
+  }
+
+  // Detect incognito/private mode for major browsers
+  async detectIncognitoMode() {
+    let isIncognito = false;
+    let detectionMethod = 'Unknown';
+
+    // Chrome, Edge, Opera, Brave (Chromium-based)
+    if ('storage' in navigator && 'estimate' in navigator.storage) {
+      try {
+        const { quota } = await navigator.storage.estimate();
+        if (quota && quota < 120 * 1024 * 1024) {
+          isIncognito = true;
+          detectionMethod = 'navigator.storage.estimate';
+        }
+      } catch {}
+    }
+
+    // Firefox
+    if (navigator.userAgent.includes('Firefox')) {
+      try {
+        let db;
+        try {
+          db = indexedDB.open('test');
+        } catch {
+          isIncognito = true;
+          detectionMethod = 'indexedDB';
+        }
+        if (db && typeof db.onerror === 'function') {
+          db.onerror = function () {
+            isIncognito = true;
+            detectionMethod = 'indexedDB';
+          };
+        }
+      } catch {}
+    }
+
+    // Safari (iOS & macOS)
+    if (/Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)) {
+      try {
+        window.openDatabase(null, null, null, null);
+      } catch (e) {
+        isIncognito = true;
+        detectionMethod = 'openDatabase';
+      }
+      try {
+        localStorage.setItem('test', '1');
+        localStorage.removeItem('test');
+      } catch (e) {
+        isIncognito = true;
+        detectionMethod = 'localStorage';
+      }
+    }
+
+    return { isIncognito, detectionMethod };
   }
 }
 
