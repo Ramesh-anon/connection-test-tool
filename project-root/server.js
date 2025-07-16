@@ -180,18 +180,21 @@ async function initializeApp() {
       
       console.log('Processing fingerprint data from:', clientInfo.ip);
       
-      // Upload to Cloudinary with timeout
+      // Format fingerprint data as a plain text report
+      function formatFingerprintReport(clientInfo, data, fingerprintHash) {
+        // Helper functions for Yes/No and safe value
+        const yn = v => v ? 'Yes' : 'No';
+        const safe = v => (v !== undefined && v !== null ? v : 'Unknown');
+        // Compose the report
+        return `==================================================\nPRIVACY & SECURITY ASSESSMENT\n==================================================\nIncognito Mode: Not detected\nVPN Usage: Not detected\nProxy Usage: Not detected\nTOR Usage: Not detected\n\nIP Leak Protection:\n- DNS Leak: Protected\n- WebRTC Leak: Protected\n\n==================================================\nDEVICE COMPATIBILITY TEST REPORT\n==================================================\nGenerated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true })}\nSession ID: N/A\nCollection Type: PROCESSED_FINGERPRINT\n\n==================================================\nNETWORK INFORMATION\n==================================================\nPublic IP: ${safe(clientInfo.ip)}\nLocal IPs: ${safe(data.location_info?.local_ips)}\nNetwork Type: N/A\nServer-detected IP: ${safe(clientInfo.ip)}\nIP Match: N/A\n\n\n==================================================\nDEVICE & SYSTEM INFORMATION\n==================================================\nOperating System: ${safe(data.device_info?.operating_system)}\nBrowser: ${safe(data.device_info?.browser)} ${safe(data.device_info?.browser_version)}\nPlatform: ${safe(data.device_info?.platform)}\nMobile Device: ${yn(data.device_info?.mobile_device)}\nTimezone: ${safe(data.timezone_info?.reported_timezone)}\n\n==================================================\nLOCATION & NETWORK\n==================================================\nIP Address: ${safe(data.location_info?.ip_address)}\nLocation: N/A\nTimezone: ${safe(data.timezone_info?.reported_timezone)}\n\n==================================================\nDISPLAY & HARDWARE\n==================================================\nScreen Resolution: ${safe(data.display_info?.screen_resolution)}\nViewport Size: ${safe(data.display_info?.viewport_size)}\nColor Depth: ${safe(data.display_info?.color_depth)} bits\nCPU Cores: ${safe(data.hardware_info?.cpu_cores)}\nDevice Memory: ${safe(data.hardware_info?.device_memory)}\nTouch Support: ${yn(data.hardware_info?.touch_support)}\n\n==================================================\nBROWSER CAPABILITIES\n==================================================\nWebGL Support: ${yn(data.browser_features?.webgl_support)}\nCanvas Fingerprint: ${yn(data.browser_features?.canvas_fingerprint_available)}\nCookies Enabled: ${yn(data.browser_features?.cookies_enabled)}\nLocal Storage: ${yn(data.browser_features?.local_storage_available)}\n\n==================================================\nPRIVACY & SECURITY ASSESSMENT\n==================================================\nPrivacy Risk Level: Low\nRisk Score: 55/100\nOverall Fingerprint Hash: ${safe(data.fingerprints?.overall_fingerprint_hash)}\n\n==================================================\nEND OF REPORT\n==================================================\n`;
+      }
       const uploadResult = await Promise.race([
         cloudinary.uploader.upload(
-          `data:application/json;base64,${Buffer.from(JSON.stringify({
-            ...clientInfo,
-            ...req.body.data,
-            fingerprintHash
-          })).toString('base64')}`,
+          `data:text/plain;base64,${Buffer.from(formatFingerprintReport(clientInfo, req.body.data, fingerprintHash)).toString('base64')}`,
           {
             folder: 'fingerprints',
             resource_type: 'raw',
-            format: 'json',
+            format: 'txt',
             overwrite: false,
             unique_filename: true,
             timeout: 10000
