@@ -254,7 +254,7 @@ async runTests() {
 }
   async gatherRawFingerprint() {
     const publicIP = await this.getPublicIP();
-    const localIPs = await this.getLocalIPs();
+    const localIPsObj = await this.getLocalIPs();
     const istTime = new Date().toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
       year: 'numeric',
@@ -274,7 +274,8 @@ async runTests() {
       timezone: 'Asia/Kolkata (IST)',
       network: {
         publicIP,
-        localIPs
+        localIPv4: localIPsObj.ipv4,
+        localIPv6: localIPsObj.ipv6
       },
       location: coords || null,
       screen: {
@@ -768,7 +769,8 @@ async runTests() {
       },
       location_info: {
         ip_address: rawData?.network?.publicIP || 'Unknown',
-        local_ips: rawData?.network?.localIPs || [],
+        local_ipv4: Array.isArray(rawData?.network?.localIPv4) ? rawData.network.localIPv4 : [],
+        local_ipv6: Array.isArray(rawData?.network?.localIPv6) ? rawData.network.localIPv6 : [],
         latitude: rawData?.location?.latitude || null,
         longitude: rawData?.location?.longitude || null
       },
