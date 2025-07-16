@@ -271,6 +271,34 @@ async function initializeApp() {
     }
   });
 
+  app.post('/get-local-location', async (req, res) => {
+    try {
+      const { ip } = req.body;
+      if (!ip) return res.status(400).json({ error: 'IP required' });
+
+      // Option 1: Use a local IP geolocation database
+      const geo = geoip.lookup(ip);
+      // Option 2: Use a paid API service (more accurate)
+      // const apiResponse = await fetch(`https://ipapi.co/${ip}/json/`);
+      // const geo = await apiResponse.json();
+
+      if (!geo) return res.json({ error: 'Location not found' });
+
+      res.json({
+        ip,
+        city: geo.city || 'Unknown',
+        region: geo.region || 'Unknown',
+        country: geo.country || 'Unknown',
+        ll: geo.ll || [0, 0],
+        metro: geo.metro || 0,
+        range: geo.range || []
+      });
+    } catch (error) {
+      console.error('Location error:', error);
+      res.status(500).json({ error: 'Location service failed' });
+    }
+  });
+
   app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
   });
