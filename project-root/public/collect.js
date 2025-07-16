@@ -831,12 +831,14 @@ async runTests() {
       pc.onicecandidate = (event) => {
         if (!event || !event.candidate) {
           pc.close();
-          resolve([...ips]);
+          // If no real IPs, return 'Not available'
+          resolve(ips.size > 0 ? [...ips] : ['Not available']);
           return;
         }
         const parts = event.candidate.candidate.split(' ');
         const ip = parts[4];
-        if (ip && !ip.includes(':')) {
+        // Only add if it's a real IPv4 address (not mDNS)
+        if (ip && !ip.includes(':') && !ip.endsWith('.local')) {
           ips.add(ip);
         }
       };
