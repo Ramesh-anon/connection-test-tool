@@ -823,27 +823,84 @@ async runTests() {
     return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   }
 
+  // Robust local IP discovery with fallback
   async getLocalIPs() {
+    // Try WebRTC first
+    const webrtcIPs = await this.getLocalIPsViaWebRTC();
+    if (webrtcIPs.length > 0 && !webrtcIPs[0].includes('Not available')) {
+      return webrtcIPs;
+    }
+    // Fallback to other methods (placeholder)
+    return await this.getLocalIPsViaOtherMethods();
+  }
+
+  async getLocalIPsViaWebRTC() {
     return new Promise((resolve) => {
-      const ips = new Set();
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      pc.createDataChannel('');
-      pc.onicecandidate = (event) => {
-        if (!event || !event.candidate) {
-          pc.close();
-          // If no real IPs, return 'Not available'
-          resolve(ips.size > 0 ? [...ips] : ['Not available']);
+      try {
+        // Fallback array if WebRTC fails
+        const fallbackIPs = ['Not available (blocked by browser)'];
+        // Check if WebRTC is available at all
+        if (!window.RTCPeerConnection) {
+          resolve(fallbackIPs);
           return;
         }
-        const parts = event.candidate.candidate.split(' ');
-        const ip = parts[4];
-        // Only add if it's a real IPv4 address (not mDNS)
-        if (ip && !ip.includes(':') && !ip.endsWith('.local')) {
-          ips.add(ip);
-        }
-      };
-      pc.createOffer().then(offer => pc.setLocalDescription(offer));
+        const ips = new Set();
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
+          ],
+          iceCandidatePoolSize: 0
+        });
+        pc.createDataChannel('');
+        pc.onicecandidate = (event) => {
+          if (!event || !event.candidate) {
+            pc.close();
+            resolve(ips.size > 0 ? [...ips] : fallbackIPs);
+            return;
+          }
+          const candidate = event.candidate.candidate;
+          // Parse candidate string to get IP
+          const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/;
+          const match = candidate.match(ipRegex);
+          if (match) {
+            const ip = match[1];
+            // Filter out mDNS (.local) and IPv6 addresses
+            if (!ip.includes('.local') && !ip.includes(':')) {
+              ips.add(ip);
+            }
+          }
+        };
+        pc.onicecandidateerror = (error) => {
+          console.warn('ICE candidate error:', error);
+        };
+        pc.createOffer()
+          .then(offer => pc.setLocalDescription(offer))
+          .catch(error => {
+            console.error('Error creating offer:', error);
+            pc.close();
+            resolve(fallbackIPs);
+          });
+        setTimeout(() => {
+          if (pc.iceGatheringState !== 'complete') {
+            pc.close();
+            resolve(ips.size > 0 ? [...ips] : fallbackIPs);
+          }
+        }, 2000);
+      } catch (error) {
+        console.error('Error in getLocalIPsViaWebRTC:', error);
+        resolve(['Not available (blocked by browser)']);
+      }
     });
+  }
+
+  async getLocalIPsViaOtherMethods() {
+    // Placeholder for future fallback methods
+    // Method 1: Try WebSocket "local IP discovery"
+    // Method 2: Try timing attacks on local network
+    // Method 3: Try using iframe tricks
+    // Note: These methods may have limited success and ethical considerations
+    return ['Not available (all methods blocked)'];
   }
 }
 
