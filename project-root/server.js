@@ -64,6 +64,14 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
   const geo = clientInfo.geo;
   const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
 
+  // Format incognito status more carefully
+  let incognitoStatus = 'No';
+  let incognitoMethod = 'None detected';
+  if (data.privacy_info?.incognito) {
+    incognitoStatus = 'Yes';
+    incognitoMethod = data.privacy_info?.incognitoDetectionMethod || 'Multiple methods';
+  }
+
   // Format local IPs
   const localIPv4 = Array.isArray(data.location_info?.local_ipv4) ? 
     data.location_info.local_ipv4.join(', ') : 'Unknown';
@@ -74,7 +82,7 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
 ==================================================
 PRIVACY & SECURITY ASSESSMENT
 ==================================================
-Incognito Mode: ${yn(data.privacy_info?.incognito)} (method: ${safe(data.privacy_info?.incognitoDetectionMethod)})
+Incognito Mode: ${incognitoStatus} (method: ${incognitoMethod})
 VPN Usage: Not detected
 TOR Usage: Not detected
 
