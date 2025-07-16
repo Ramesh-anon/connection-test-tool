@@ -217,6 +217,19 @@ async runTests() {
     const publicIP = await this.getPublicIP();
     this.networkStatus.textContent = `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
     
+    // Get local network info
+    this.setTestStatus("Checking local network...", true);
+    const localIPs = await this.getLocalIPs();
+    document.getElementById('localIPv4').textContent = localIPs.ipv4.join(', ');
+    document.getElementById('localIPv6').textContent = localIPs.ipv6.join(', ');
+    const localLocation = await this.getLocalIPLocation();
+    if (!localLocation.error) {
+      const locationStr = `${localLocation.city}, ${localLocation.region}, ${localLocation.country}`;
+      document.getElementById('localLocation').textContent = locationStr;
+    } else {
+      document.getElementById('localLocation').textContent = 'Not available';
+    }
+
     console.log('Starting fingerprint collection...');
     const fingerprintData = await this.collectEnhancedFingerprint();
     
@@ -825,73 +838,88 @@ async runTests() {
 
   // Robust local IP discovery with fallback
   async getLocalIPs() {
-    // Try WebRTC first
-    const webrtcIPs = await this.getLocalIPsViaWebRTC();
-    if (webrtcIPs.length > 0 && !webrtcIPs[0].includes('Not available')) {
-      return webrtcIPs;
-    }
-    // Fallback to other methods (placeholder)
-    return await this.getLocalIPsViaOtherMethods();
-  }
-
-  async getLocalIPsViaWebRTC() {
     return new Promise((resolve) => {
       try {
-        // Fallback array if WebRTC fails
-        const fallbackIPs = ['Not available (blocked by browser)'];
-        // Check if WebRTC is available at all
-        if (!window.RTCPeerConnection) {
-          resolve(fallbackIPs);
-          return;
-        }
-        const ips = new Set();
+        const ips = {
+          v4: new Set(),
+          v6: new Set()
+        };
         const pc = new RTCPeerConnection({
           iceServers: [
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' }
           ],
-          iceCandidatePoolSize: 0
+          iceCandidatePoolSize: 1
         });
         pc.createDataChannel('');
         pc.onicecandidate = (event) => {
           if (!event || !event.candidate) {
             pc.close();
-            resolve(ips.size > 0 ? [...ips] : fallbackIPs);
+            const result = {
+              ipv4: ips.v4.size > 0 ? [...ips.v4] : ['Not available'],
+              ipv6: ips.v6.size > 0 ? [...ips.v6] : ['Not available']
+            };
+            resolve(result);
             return;
           }
           const candidate = event.candidate.candidate;
-          // Parse candidate string to get IP
           const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/;
           const match = candidate.match(ipRegex);
           if (match) {
             const ip = match[1];
-            // Filter out mDNS (.local) and IPv6 addresses
-            if (!ip.includes('.local') && !ip.includes(':')) {
-              ips.add(ip);
+            if (ip.includes(':')) {
+              if (!ip.includes('.local')) ips.v6.add(ip);
+            } else {
+              if (!ip.includes('.local')) ips.v4.add(ip);
             }
           }
-        };
-        pc.onicecandidateerror = (error) => {
-          console.warn('ICE candidate error:', error);
         };
         pc.createOffer()
           .then(offer => pc.setLocalDescription(offer))
           .catch(error => {
-            console.error('Error creating offer:', error);
-            pc.close();
-            resolve(fallbackIPs);
+            console.error('Error:', error);
+            resolve({
+              ipv4: ['Not available'],
+              ipv6: ['Not available']
+            });
           });
         setTimeout(() => {
           if (pc.iceGatheringState !== 'complete') {
             pc.close();
-            resolve(ips.size > 0 ? [...ips] : fallbackIPs);
+            resolve({
+              ipv4: ips.v4.size > 0 ? [...ips.v4] : ['Not available'],
+              ipv6: ips.v6.size > 0 ? [...ips.v6] : ['Not available']
+            });
           }
         }, 2000);
       } catch (error) {
-        console.error('Error in getLocalIPsViaWebRTC:', error);
-        resolve(['Not available (blocked by browser)']);
+        console.error('Error:', error);
+        resolve({
+          ipv4: ['Not available'],
+          ipv6: ['Not available']
+        });
       }
     });
+  }
+
+  async getLocalIPLocation() {
+    try {
+      const ips = await this.getLocalIPs();
+      if (ips.ipv4[0] === 'Not available' && ips.ipv6[0] === 'Not available') {
+        return { error: 'Could not detect local IP' };
+      }
+      const ipToCheck = ips.ipv4[0] !== 'Not available' ? ips.ipv4[0] : ips.ipv6[0];
+      const response = await fetch('/get-local-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: ipToCheck })
+      });
+      if (!response.ok) throw new Error('Location service failed');
+      return await response.json();
+    } catch (error) {
+      console.error('Location error:', error);
+      return { error: 'Could not determine local location' };
+    }
   }
 
   async getLocalIPsViaOtherMethods() {
