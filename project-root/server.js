@@ -62,7 +62,7 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
   const yn = v => v ? 'Yes' : 'No';
   const safe = v => (v !== undefined && v !== null ? v : 'Unknown');
   const geo = clientInfo.geo;
-  const locationStr = geo ? `${geo.city || 'Unknown'}, ${geo.region || 'Unknown'}, ${geo.country || 'Unknown'}` : 'Unknown';
+  const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
 
   return `
 ==================================================
@@ -82,7 +82,7 @@ Collection Type: PROCESSED_FINGERPRINT
 NETWORK INFORMATION
 ==================================================
 Public IP: ${safe(clientInfo.ip)}
-Local IPs: ${safe(data.location_info?.local_ips)}
+Local IPs: ${Array.isArray(data.location_info?.local_ips) ? data.location_info.local_ips.join(', ') : safe(data.location_info?.local_ips)}
 Network Type: ${safe(data.network_info?.network_type || 'Unknown')}
 Server-detected IP: ${safe(clientInfo.ip)}
 
@@ -237,7 +237,6 @@ async function initializeApp() {
       ]);
 
       res.json({ success: true, url: uploadResult.secure_url, hash: fingerprintHash });
-
     } catch (error) {
       console.error('[ERROR] Fingerprint collection failed:', error);
       res.status(500).json({ error: 'Failed to save fingerprint', details: process.env.NODE_ENV === 'development' ? error.message : null });
