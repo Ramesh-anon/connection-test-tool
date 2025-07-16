@@ -69,18 +69,41 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
     data.location_info.local_ipv4.join(', ') : 'Unknown';
   const localIPv6 = Array.isArray(data.location_info?.local_ipv6) ? 
     data.location_info.local_ipv6.join(', ') : 'Unknown';
-  // Incognito detection
-  const incognitoStatus = yn(data.privacy_info?.incognito);
-  const incognitoMethod = safe(data.privacy_info?.incognitoDetectionMethod);
 
+  // Privacy section
+  const privacySection = `
+==================================================
+PRIVACY STATUS
+==================================================
+Incognito Mode: ${yn(data.privacy?.isIncognito)}
+Detection Methods: ${data.privacy?.detectionMethods?.join(', ') || 'None'}
+Do Not Track: ${yn(data.privacy?.doNotTrack)}
+Cookies Enabled: ${yn(data.privacy?.cookieEnabled)}
+`;
+
+  // Browser details section
+  const browserSection = `
+==================================================
+BROWSER DETAILS
+==================================================
+Browser: ${safe(data.browserInfo?.name)} ${safe(data.browserInfo?.version)}
+Engine: ${safe(data.browserInfo?.engine)}
+Vendor: ${safe(data.browserInfo?.vendor)}
+WebDriver: ${yn(data.browserInfo?.webdriver)}
+`;
+
+  // Platform details section
+  const platformSection = `
+==================================================
+PLATFORM DETAILS
+==================================================
+OS: ${safe(data.platformInfo?.os)}
+Architecture: ${safe(data.platformInfo?.architecture)}
+Platform: ${safe(clientInfo.userAgent)}
+`;
+
+  // Compose the report
   return `
-==================================================
-PRIVACY & SECURITY ASSESSMENT
-==================================================
-Incognito Mode: ${incognitoStatus} (method: ${incognitoMethod})
-VPN Usage: Not detected
-TOR Usage: Not detected
-
 ==================================================
 DEVICE COMPATIBILITY TEST REPORT
 ==================================================
@@ -93,45 +116,11 @@ NETWORK INFORMATION
 Public IP: ${safe(clientInfo.ip)}
 Local IPv4: ${localIPv4}
 Local IPv6: ${localIPv6}
-Network Type: ${safe(data.network_info?.network_type || 'Unknown')}
-Server-detected IP: ${safe(clientInfo.ip)}
-
-==================================================
-DEVICE & SYSTEM INFORMATION
-==================================================
-Operating System: ${safe(data.device_info?.operating_system)}
-Browser: ${safe(data.device_info?.browser)} ${safe(data.device_info?.browser_version)}
-Platform: ${safe(data.device_info?.platform)}
-Mobile Device: ${yn(data.device_info?.mobile_device)}
-Timezone: ${safe(data.timezone_info?.reported_timezone)}
-
-==================================================
-LOCATION & NETWORK
-==================================================
-IP Address: ${safe(data.location_info?.ip_address)}
 Location: ${locationStr}
-Timezone: ${safe(data.timezone_info?.reported_timezone)}
 
-==================================================
-DISPLAY & HARDWARE
-==================================================
-Screen Resolution: ${safe(data.display_info?.screen_resolution)}
-Viewport Size: ${safe(data.display_info?.viewport_size)}
-Color Depth: ${safe(data.display_info?.color_depth)} bits
-CPU Cores: ${safe(data.hardware_info?.cpu_cores)}
-Device Memory: ${safe(data.hardware_info?.device_memory)}
-Touch Support: ${yn(data.hardware_info?.touch_support)}
-
-==================================================
-BROWSER CAPABILITIES
-==================================================
-Cookies Enabled: ${yn(data.browser_features?.cookies_enabled)}
-
-==================================================
-PRIVACY & SECURITY ASSESSMENT
-==================================================
-Overall Fingerprint Hash: ${safe(data.fingerprints?.overall_fingerprint_hash)}
-
+${privacySection}
+${browserSection}
+${platformSection}
 ==================================================
 END OF REPORT
 ==================================================
