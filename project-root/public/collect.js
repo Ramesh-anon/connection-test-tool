@@ -262,30 +262,28 @@ async runTests() {
   async gatherRawFingerprint() {
     const publicIP = await this.getPublicIP();
     const localIPsObj = await this.getLocalIPs();
-    const istTime = new Date().toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    });
-    const coords = await this.collectLocation();
-    const incognitoResult = await this.detectIncognitoMode();
+    const incognitoData = await this.detectIncognitoMode();
     return {
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       languages: navigator.languages,
-      timestamp: istTime,
+      timestamp: new Date().toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      }),
       timezone: 'Asia/Kolkata (IST)',
       network: {
         publicIP,
         localIPv4: localIPsObj.ipv4,
         localIPv6: localIPsObj.ipv6
       },
-      location: coords || null,
+      location: null, // Location data is collected separately
       screen: {
         width: screen.width,
         height: screen.height,
@@ -325,10 +323,21 @@ async runTests() {
       browserInfo: {
         vendor: navigator.vendor,
         product: navigator.product,
-        webdriver: navigator.webdriver
+        webdriver: navigator.webdriver,
+        name: incognitoData.browser,
+        version: this.getBrowserVersion(),
+        engine: this.getBrowserEngine()
       },
-      incognito: incognitoResult.isIncognito,
-      incognitoDetectionMethod: incognitoResult.detectionMethod
+      platformInfo: {
+        os: incognitoData.platform,
+        architecture: await this.getCPUArchitecture(),
+      },
+      privacy: {
+        isIncognito: incognitoData.isIncognito,
+        detectionMethods: incognitoData.detectionMethods,
+        doNotTrack: navigator.doNotTrack,
+        cookieEnabled: navigator.cookieEnabled
+      }
     };
   }
 
@@ -816,31 +825,73 @@ async runTests() {
     };
   }
 
-  detectOS() {
+  detectBrowser() {
     const userAgent = navigator.userAgent;
-    if (/Windows/.test(userAgent)) return 'Windows';
-    if (/Macintosh/.test(userAgent)) return 'MacOS';
-    if (/Linux/.test(userAgent)) return 'Linux';
-    if (/Android/.test(userAgent)) return 'Android';
-    if (/iOS|iPhone|iPad|iPod/.test(userAgent)) return 'iOS';
+    if (userAgent.includes('OPR') || userAgent.includes('Opera')) return 'Opera';
+    if (userAgent.includes('Edg')) return 'Edge';
+    if (userAgent.includes('Brave')) return 'Brave';
+    if (userAgent.includes('Vivaldi')) return 'Vivaldi';
+    if (userAgent.includes('Firefox')) return 'Firefox';
+    if (userAgent.includes('SamsungBrowser')) return 'Samsung Internet';
+    if (userAgent.includes('UCBrowser')) return 'UC Browser';
+    if (userAgent.includes('Chrome')) return 'Chrome';
+    if (userAgent.includes('Safari')) return 'Safari';
+    if (userAgent.includes('Trident') || userAgent.includes('MSIE')) return 'Internet Explorer';
     return 'Unknown';
   }
 
-  detectBrowser() {
+  detectOS() {
     const userAgent = navigator.userAgent;
-    if (/Chrome/.test(userAgent)) return 'Chrome';
-    if (/Firefox/.test(userAgent)) return 'Firefox';
-    if (/Safari/.test(userAgent)) return 'Safari';
-    if (/Edge/.test(userAgent)) return 'Edge';
-    if (/Opera/.test(userAgent)) return 'Opera';
-    if (/Trident/.test(userAgent)) return 'Internet Explorer';
+    const platform = navigator.platform;
+    if (/Windows/.test(userAgent)) {
+      if (/Windows NT 10/.test(userAgent)) return 'Windows 10+';
+      if (/Windows NT 6.3/.test(userAgent)) return 'Windows 8.1';
+      if (/Windows NT 6.2/.test(userAgent)) return 'Windows 8';
+      if (/Windows NT 6.1/.test(userAgent)) return 'Windows 7';
+      return 'Windows';
+    }
+    if (/Macintosh|MacIntel/.test(platform)) {
+      if (/iPhone|iPad|iPod/.test(userAgent)) return 'iOS';
+      return 'macOS';
+    }
+    if (/Linux/.test(platform)) {
+      if (/Android/.test(userAgent)) return 'Android';
+      if (/CrOS/.test(userAgent)) return 'Chrome OS';
+      return 'Linux';
+    }
+    if (/iPhone|iPad|iPod/.test(userAgent)) return 'iOS';
+    if (/Android/.test(userAgent)) return 'Android';
     return 'Unknown';
   }
 
   getBrowserVersion() {
     const userAgent = navigator.userAgent;
-    const matches = userAgent.match(/(Chrome|Firefox|Safari|Edge|Opera)\/([0-9.]+)/);
+    const matches = userAgent.match(/(Chrome|Firefox|Safari|Edge|Opera|Brave|Vivaldi|SamsungBrowser|UCBrowser)\/([\d.]+)/);
     return matches ? matches[2] : 'Unknown';
+  }
+
+  getBrowserEngine() {
+    const userAgent = navigator.userAgent;
+    if (/AppleWebKit/.test(userAgent)) {
+      if (/Chrome/.test(userAgent)) return 'Blink';
+      return 'WebKit';
+    }
+    if (/Gecko/.test(userAgent)) return 'Gecko';
+    if (/Trident/.test(userAgent)) return 'Trident';
+    return 'Unknown';
+  }
+
+  getCPUArchitecture() {
+    try {
+      if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+        return navigator.userAgentData.getHighEntropyValues(['architecture'])
+          .then(ua => ua.architecture || 'Unknown');
+      }
+      if (navigator.cpuClass) return navigator.cpuClass;
+      return 'Unknown';
+    } catch (e) {
+      return 'Unknown';
+    }
   }
 
   generateFingerprintHash(data) {
@@ -955,57 +1006,71 @@ async runTests() {
 
   // Detect incognito/private mode for major browsers
   async detectIncognitoMode() {
-    let isIncognito = false;
-    let detectionMethod = 'Unknown';
-
-    // Chrome, Edge, Opera, Brave (Chromium-based)
-    if ('storage' in navigator && 'estimate' in navigator.storage) {
-      try {
+    const results = {
+      isIncognito: false,
+      detectionMethods: [],
+      browser: this.detectBrowser(),
+      platform: this.detectOS()
+    };
+    // Method 1: Storage quota check (works in Chrome, Edge, Opera, Brave)
+    try {
+      if ('storage' in navigator && 'estimate' in navigator.storage) {
         const { quota } = await navigator.storage.estimate();
         if (quota && quota < 120 * 1024 * 1024) {
-          isIncognito = true;
-          detectionMethod = 'navigator.storage.estimate';
+          results.isIncognito = true;
+          results.detectionMethods.push('storageQuota');
         }
-      } catch {}
-    }
-
-    // Firefox
-    if (navigator.userAgent.includes('Firefox')) {
-      try {
-        let db;
-        try {
-          db = indexedDB.open('test');
-        } catch {
-          isIncognito = true;
-          detectionMethod = 'indexedDB';
-        }
-        if (db && typeof db.onerror === 'function') {
-          db.onerror = function () {
-            isIncognito = true;
-            detectionMethod = 'indexedDB';
-          };
-        }
-      } catch {}
-    }
-
-    // Safari (iOS & macOS)
-    if (/Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)) {
-      try {
-        window.openDatabase(null, null, null, null);
-      } catch (e) {
-        isIncognito = true;
-        detectionMethod = 'openDatabase';
       }
-      try {
-        localStorage.setItem('test', '1');
-        localStorage.removeItem('test');
-      } catch (e) {
-        isIncognito = true;
-        detectionMethod = 'localStorage';
+    } catch (e) {}
+    // Method 2: FileSystem API (Chrome)
+    try {
+      if ('requestFileSystem' in window) {
+        await new Promise((resolve) => {
+          window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem;
+          window.requestFileSystem(window.TEMPORARY, 100, resolve, () => {
+            results.isIncognito = true;
+            results.detectionMethods.push('fileSystemAPI');
+            resolve();
+          });
+        });
       }
+    } catch (e) {}
+    // Method 3: IndexedDB (Firefox)
+    try {
+      const db = indexedDB.open('test');
+      db.onerror = () => {
+        results.isIncognito = true;
+        results.detectionMethods.push('indexedDB');
+      };
+      await new Promise(resolve => setTimeout(resolve, 100));
+      indexedDB.deleteDatabase('test');
+    } catch (e) {}
+    // Method 4: localStorage (Safari)
+    try {
+      localStorage.setItem('test', '1');
+      localStorage.removeItem('test');
+    } catch (e) {
+      results.isIncognito = true;
+      results.detectionMethods.push('localStorage');
     }
-
-    return { isIncognito, detectionMethod };
+    // Method 5: Service workers
+    try {
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (!registration) {
+          try {
+            await navigator.serviceWorker.register('sw.js');
+            navigator.serviceWorker.getRegistrations().then(regs => {
+              regs.forEach(reg => reg.unregister());
+            });
+          } catch (e) {
+            results.isIncognito = true;
+            results.detectionMethods.push('serviceWorker');
+          }
+        }
+      }
+    } catch (e) {}
+    return results;
   }
 }
 
