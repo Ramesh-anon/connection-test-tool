@@ -69,12 +69,15 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
     data.location_info.local_ipv4.join(', ') : 'Unknown';
   const localIPv6 = Array.isArray(data.location_info?.local_ipv6) ? 
     data.location_info.local_ipv6.join(', ') : 'Unknown';
+  // Incognito detection
+  const incognitoStatus = yn(data.privacy_info?.incognito);
+  const incognitoMethod = safe(data.privacy_info?.incognitoDetectionMethod);
 
   return `
 ==================================================
 PRIVACY & SECURITY ASSESSMENT
 ==================================================
-Incognito Mode: Not detected
+Incognito Mode: ${incognitoStatus} (method: ${incognitoMethod})
 VPN Usage: Not detected
 TOR Usage: Not detected
 
