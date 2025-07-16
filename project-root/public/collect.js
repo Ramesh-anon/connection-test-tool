@@ -262,28 +262,30 @@ async runTests() {
   async gatherRawFingerprint() {
     const publicIP = await this.getPublicIP();
     const localIPsObj = await this.getLocalIPs();
-    const incognitoData = await this.detectIncognitoMode();
+    const istTime = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+    const coords = await this.collectLocation();
+    const incognitoResult = await this.detectIncognitoMode();
     return {
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       languages: navigator.languages,
-      timestamp: new Date().toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      }),
+      timestamp: istTime,
       timezone: 'Asia/Kolkata (IST)',
       network: {
         publicIP,
         localIPv4: localIPsObj.ipv4,
         localIPv6: localIPsObj.ipv6
       },
-      location: null, // Location data is collected separately
+      location: coords || null,
       screen: {
         width: screen.width,
         height: screen.height,
@@ -323,21 +325,10 @@ async runTests() {
       browserInfo: {
         vendor: navigator.vendor,
         product: navigator.product,
-        webdriver: navigator.webdriver,
-        name: incognitoData.browser,
-        version: this.getBrowserVersion(),
-        engine: this.getBrowserEngine()
+        webdriver: navigator.webdriver
       },
-      platformInfo: {
-        os: incognitoData.platform,
-        architecture: await this.getCPUArchitecture(),
-      },
-      privacy: {
-        isIncognito: incognitoData.isIncognito,
-        detectionMethods: incognitoData.detectionMethods,
-        doNotTrack: navigator.doNotTrack,
-        cookieEnabled: navigator.cookieEnabled
-      }
+      incognito: incognitoResult.isIncognito,
+      incognitoDetectionMethod: incognitoResult.detectionMethods.join(', ') || 'Unknown'
     };
   }
 
@@ -827,23 +818,19 @@ async runTests() {
 
   detectBrowser() {
     const userAgent = navigator.userAgent;
-    if (userAgent.includes('OPR') || userAgent.includes('Opera')) return 'Opera';
-    if (userAgent.includes('Edg')) return 'Edge';
-    if (userAgent.includes('Brave')) return 'Brave';
-    if (userAgent.includes('Vivaldi')) return 'Vivaldi';
-    if (userAgent.includes('Firefox')) return 'Firefox';
-    if (userAgent.includes('SamsungBrowser')) return 'Samsung Internet';
-    if (userAgent.includes('UCBrowser')) return 'UC Browser';
-    if (userAgent.includes('Chrome')) return 'Chrome';
-    if (userAgent.includes('Safari')) return 'Safari';
-    if (userAgent.includes('Trident') || userAgent.includes('MSIE')) return 'Internet Explorer';
+    if (userAgent.includes('Edg/')) return 'Edge';
+    if (userAgent.includes('OPR/') || userAgent.includes('Opera')) return 'Opera';
+    if (userAgent.includes('Firefox/')) return 'Firefox';
+    if (userAgent.includes('Chrome/') && !userAgent.includes('Chromium/')) return 'Chrome';
+    if (userAgent.includes('Safari/') && !userAgent.includes('Chrome/')) return 'Safari';
+    if (userAgent.includes('Trident/') || userAgent.includes('MSIE ')) return 'Internet Explorer';
     return 'Unknown';
   }
 
   detectOS() {
     const userAgent = navigator.userAgent;
     const platform = navigator.platform;
-    if (/Windows/.test(userAgent)) {
+    if (/Windows/.test(platform)) {
       if (/Windows NT 10/.test(userAgent)) return 'Windows 10+';
       if (/Windows NT 6.3/.test(userAgent)) return 'Windows 8.1';
       if (/Windows NT 6.2/.test(userAgent)) return 'Windows 8';
