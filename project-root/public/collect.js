@@ -328,7 +328,9 @@ async runTests() {
         webdriver: navigator.webdriver
       },
       incognito: incognitoResult.isIncognito,
-      incognitoDetectionMethod: incognitoResult.detectionMethods.join(', ') || 'Unknown'
+      incognitoDetectionMethod: incognitoResult.detectionMethods.length > 0 
+        ? incognitoResult.detectionMethods.join(', ') 
+        : 'Not detected'
     };
   }
 
@@ -995,11 +997,9 @@ async runTests() {
   async detectIncognitoMode() {
     const results = {
       isIncognito: false,
-      detectionMethods: [],
-      browser: this.detectBrowser(),
-      platform: this.detectOS()
+      detectionMethods: []
     };
-    // Method 1: Storage quota check (works in Chrome, Edge, Opera, Brave)
+    // Method 1: Storage quota check (most reliable for Chromium browsers)
     try {
       if ('storage' in navigator && 'estimate' in navigator.storage) {
         const { quota } = await navigator.storage.estimate();
@@ -1009,40 +1009,48 @@ async runTests() {
         }
       }
     } catch (e) {}
-    // Method 2: FileSystem API (Chrome)
+    // Method 2: FileSystem API (Chrome-specific)
     try {
-      if ('requestFileSystem' in window) {
+      if ('requestFileSystem' in window || 'webkitRequestFileSystem' in window) {
+        const requestFS = window.requestFileSystem || window.webkitRequestFileSystem;
         await new Promise((resolve) => {
-          window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem;
-          window.requestFileSystem(window.TEMPORARY, 100, resolve, () => {
-            results.isIncognito = true;
-            results.detectionMethods.push('fileSystemAPI');
+          requestFS(window.TEMPORARY, 100, resolve, () => {
+            if (navigator.userAgent.includes('Chrome')) {
+              results.isIncognito = true;
+              results.detectionMethods.push('fileSystemAPI');
+            }
             resolve();
           });
         });
       }
     } catch (e) {}
-    // Method 3: IndexedDB (Firefox)
-    try {
-      const db = indexedDB.open('test');
-      db.onerror = () => {
-        results.isIncognito = true;
-        results.detectionMethods.push('indexedDB');
-      };
-      await new Promise(resolve => setTimeout(resolve, 100));
-      indexedDB.deleteDatabase('test');
-    } catch (e) {}
-    // Method 4: localStorage (Safari)
-    try {
-      localStorage.setItem('test', '1');
-      localStorage.removeItem('test');
-    } catch (e) {
-      results.isIncognito = true;
-      results.detectionMethods.push('localStorage');
+    // Method 3: IndexedDB (Firefox-specific)
+    if (navigator.userAgent.includes('Firefox')) {
+      try {
+        const req = indexedDB.open('test');
+        req.onerror = () => {
+          results.isIncognito = true;
+          results.detectionMethods.push('indexedDB');
+        };
+        await new Promise(resolve => setTimeout(resolve, 100));
+        indexedDB.deleteDatabase('test');
+      } catch (e) {}
     }
-    // Method 5: Service workers
-    try {
-      if ('serviceWorker' in navigator) {
+    // Method 4: localStorage (Safari-specific)
+    if (/Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)) {
+      try {
+        localStorage.setItem('test', '1');
+        localStorage.removeItem('test');
+      } catch (e) {
+        results.isIncognito = true;
+        results.detectionMethods.push('localStorage');
+      }
+    }
+    // Only use serviceWorker as last resort and only for Chrome
+    if (results.isIncognito === false && 
+        navigator.userAgent.includes('Chrome') && 
+        'serviceWorker' in navigator) {
+      try {
         const registration = await navigator.serviceWorker.getRegistration();
         if (!registration) {
           try {
@@ -1051,12 +1059,18 @@ async runTests() {
               regs.forEach(reg => reg.unregister());
             });
           } catch (e) {
-            results.isIncognito = true;
-            results.detectionMethods.push('serviceWorker');
+            if (results.detectionMethods.length > 0) {
+              results.isIncognito = true;
+              results.detectionMethods.push('serviceWorker');
+            }
           }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
+    // Require at least two different methods to confirm incognito
+    if (results.detectionMethods.length < 2) {
+      results.isIncognito = false;
+    }
     return results;
   }
 }
