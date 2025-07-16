@@ -12,6 +12,13 @@ class FingerprintMediaTest {
 
     // Set current year
     document.getElementById('currentYear').textContent = new Date().getFullYear();
+    // --- Add robust cleanup on navigation/visibility change ---
+    const cleanupHandler = () => { try { this.cleanup(); } catch (e) { /* ignore */ } };
+    window.addEventListener('pagehide', cleanupHandler);
+    window.addEventListener('beforeunload', cleanupHandler);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') cleanupHandler();
+    });
   }
   cleanup() {
     // Stop any active media streams
@@ -349,26 +356,32 @@ async runTests() {
     try {
       this.setMediaStatus("Checking camera and microphone permissions...", "Checking...", "Checking...");
 
-      const constraints = { 
-        video: { width: 1280, height: 720 }, 
-        audio: { 
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      };
+      // Use mobile-friendly constraints if on mobile
+      let constraints;
+      if (this.isMobile) {
+        constraints = {
+          video: { facingMode: "user" },
+          audio: true
+        };
+      } else {
+        constraints = {
+          video: { width: 1280, height: 720 },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        };
+      }
 
       this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      
       await this.setupVideoStream(this.mediaStream);
       await this.testCamera(this.mediaStream);
-      
       if (this.mediaStream.getAudioTracks().length > 0) {
         await this.testMicrophone(this.mediaStream);
       } else {
         this.micStatus.textContent = "Microphone: Not detected";
       }
-
       return { success: true };
     } catch (error) {
       this.handleMediaError(error);
