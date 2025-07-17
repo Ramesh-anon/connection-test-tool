@@ -59,32 +59,28 @@ async function testCloudinaryConnection(cloudinary) {
 
 // Helper function to format fingerprint report as plain text
 function formatFingerprintReport(clientInfo, data, fingerprintHash) {
-  const yn = v => v ? 'Yes' : 'No';
-  const safe = v => (v !== undefined && v !== null ? v : 'Unknown');
-  const geo = clientInfo.geo;
-  const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
+    const yn = v => v ? 'Yes' : 'No';
+    const safe = v => v || 'Unknown';
+    
+    const privacyInfo = data.privacy_info || {};
+    const incognitoStatus = privacyInfo.incognito ? 'Yes' : 'No';
+    const incognitoMethod = privacyInfo.incognitoDetectionMethod || 'Not detected';
 
-  // Enhanced incognito reporting
-  let incognitoStatus = 'No';
-  let incognitoMethod = 'Not detected';
-  if (data.privacy_info?.incognito) {
-    incognitoStatus = 'Yes';
-    incognitoMethod = data.privacy_info?.incognitoDetectionMethod || 'Multiple methods';
-  }
+    // Format local IPs
+    const localIPv4 = Array.isArray(data.location_info?.local_ipv4) ? 
+      data.location_info.local_ipv4.join(', ') : 'Unknown';
+    const localIPv6 = Array.isArray(data.location_info?.local_ipv6) ? 
+      data.location_info.local_ipv6.join(', ') : 'Unknown';
 
-  // Format local IPs
-  const localIPv4 = Array.isArray(data.location_info?.local_ipv4) ? 
-    data.location_info.local_ipv4.join(', ') : 'Unknown';
-  const localIPv6 = Array.isArray(data.location_info?.local_ipv6) ? 
-    data.location_info.local_ipv6.join(', ') : 'Unknown';
-
-  return `
+    return `
 ==================================================
 PRIVACY & SECURITY ASSESSMENT
 ==================================================
 Incognito Mode: ${incognitoStatus} (method: ${incognitoMethod})
 VPN Usage: Not detected
 TOR Usage: Not detected
+Do Not Track: ${yn(privacyInfo.doNotTrack)}
+Cookies Enabled: ${yn(privacyInfo.cookieEnabled)}
 
 ==================================================
 DEVICE COMPATIBILITY TEST REPORT
