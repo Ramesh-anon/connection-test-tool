@@ -64,9 +64,9 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
   const geo = clientInfo.geo;
   const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
 
-  // Format incognito status more carefully
+  // Enhanced incognito reporting
   let incognitoStatus = 'No';
-  let incognitoMethod = 'None detected';
+  let incognitoMethod = 'Not detected';
   if (data.privacy_info?.incognito) {
     incognitoStatus = 'Yes';
     incognitoMethod = data.privacy_info?.incognitoDetectionMethod || 'Multiple methods';
