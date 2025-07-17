@@ -71,6 +71,14 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
       data.location_info.local_ipv4.join(', ') : 'Unknown';
     const localIPv6 = Array.isArray(data.location_info?.local_ipv6) ? 
       data.location_info.local_ipv6.join(', ') : 'Unknown';
+    // Define locationStr safely
+    let locationStr = 'Unknown';
+    if (data.location_info) {
+      const city = data.location_info.city || '';
+      const region = data.location_info.region || '';
+      const country = data.location_info.country || '';
+      locationStr = [city, region, country].filter(Boolean).join(', ') || 'Unknown';
+    }
 
     return `
 ==================================================
