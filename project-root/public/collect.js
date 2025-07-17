@@ -808,7 +808,9 @@ async runTests() {
       },
       privacy_info: {
         incognito: rawData.incognito,
-        incognitoDetectionMethod: rawData.incognitoDetectionMethod
+        incognitoDetectionMethod: rawData.incognitoDetectionMethod,
+        doNotTrack: navigator.doNotTrack === '1',
+        cookieEnabled: navigator.cookieEnabled
       },
       fingerprints: {
         overall_fingerprint_hash: this.generateFingerprintHash(rawData)
@@ -817,14 +819,17 @@ async runTests() {
   }
 
   detectBrowser() {
-    const userAgent = navigator.userAgent;
-    // Check Edge first since it contains Chrome in UA string
-    if (userAgent.includes('Edg/')) return 'Edge';
-    if (userAgent.includes('OPR/') || userAgent.includes('Opera')) return 'Opera';
-    if (userAgent.includes('Brave')) return 'Brave';
-    if (userAgent.includes('Firefox/')) return 'Firefox';
-    if (userAgent.includes('Chrome/') && !userAgent.includes('Chromium/')) return 'Chrome';
-    if (userAgent.includes('Safari/') && !userAgent.includes('Chrome/')) return 'Safari';
+    const ua = navigator.userAgent;
+    // Specific browser checks first
+    if (ua.includes('Brave')) return 'Brave';
+    if (ua.includes('Edg/')) return 'Edge';
+    if (ua.includes('OPR/') || ua.includes('Opera')) return 'Opera';
+    if (ua.includes('Firefox/')) return 'Firefox';
+    if (ua.includes('SamsungBrowser/')) return 'Samsung';
+    // Chrome should be checked after Edge and Opera
+    if (ua.includes('Chrome/')) return 'Chrome';
+    // Safari check should come after Chrome check
+    if (ua.includes('Safari/')) return 'Safari';
     return 'Unknown';
   }
 
@@ -994,83 +999,99 @@ async runTests() {
 
   // Detect incognito/private mode for major browsers
   async detectIncognitoMode() {
-    const results = {
-      isIncognito: false,
-      detectionMethods: [],
-      browser: this.detectBrowser()
+    const detectionResults = {
+        isIncognito: false,
+        methods: [],
+        browser: this.detectBrowser()
     };
 
     // Method 1: FileSystem API (Chromium browsers)
-    if (["Chrome", "Edge", "Opera", "Brave"].includes(results.browser)) {
-      try {
-        const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-        if (fs) {
-          await new Promise((resolve) => {
-            fs(window.TEMPORARY, 100, () => resolve(false), () => {
-              results.isIncognito = true;
-              results.detectionMethods.push('fileSystemAPI');
-              resolve(true);
-            });
-          });
-        }
-      } catch (e) {}
+    if (["Chrome", "Edge", "Opera", "Brave"].includes(detectionResults.browser)) {
+        try {
+            const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+            if (fs) {
+                const fsResult = await new Promise(resolve => {
+                    fs(window.TEMPORARY, 100, 
+                        () => resolve(false), // Not incognito
+                        () => resolve(true)  // Incognito
+                    );
+                });
+                if (fsResult) {
+                    detectionResults.isIncognito = true;
+                    detectionResults.methods.push('fileSystemAPI');
+                    return detectionResults; // Early return for Chromium
+                }
+            }
+        } catch (e) {}
     }
 
-    // Method 2: Storage Quota (Firefox and Chromium)
+    // Method 2: Storage Quota (All modern browsers)
     try {
-      if ('storage' in navigator && 'estimate' in navigator.storage) {
-        const { quota } = await navigator.storage.estimate();
-        // Normal mode typically has quota > 1GB, incognito is much smaller
-        if (quota && quota < 120 * 1024 * 1024) { // 120MB threshold
-          results.isIncognito = true;
-          results.detectionMethods.push('storageQuota');
+        if ('storage' in navigator && 'estimate' in navigator.storage) {
+            const { quota } = await navigator.storage.estimate();
+            // Normal mode quota is typically several GB, incognito is much smaller
+            if (quota && quota < 120 * 1024 * 1024) { // 120MB threshold
+                detectionResults.isIncognito = true;
+                detectionResults.methods.push('storageQuota');
+                return detectionResults; // Early return if detected
+            }
         }
-      }
     } catch (e) {}
 
-    // Method 3: IndexedDB/openDatabase (Safari)
-    if (results.browser === 'Safari') {
-      try {
-        window.openDatabase(null, null, null, null);
-      } catch (e) {
-        results.isIncognito = true;
-        results.detectionMethods.push('openDatabase');
-      }
-      try {
-        localStorage.setItem('test', '1');
-        localStorage.removeItem('test');
-      } catch (e) {
-        results.isIncognito = true;
-        results.detectionMethods.push('localStorage');
-      }
-    }
-
-    // Method 4: Service Worker (fallback for Chrome)
-    if (results.isIncognito === false && results.browser === 'Chrome') {
-      try {
-        if ('serviceWorker' in navigator) {
-          const registration = await navigator.serviceWorker.getRegistration();
-          if (!registration) {
-            try {
-              await navigator.serviceWorker.register('sw.js');
-              navigator.serviceWorker.getRegistrations().then(regs => {
-                regs.forEach(reg => reg.unregister());
-              });
-            } catch (e) {
-              results.isIncognito = true;
-              results.detectionMethods.push('serviceWorker');
-            }
-          }
+    // Method 3: Safari-specific checks
+    if (detectionResults.browser === 'Safari') {
+        try {
+            // Check if localStorage is available
+            localStorage.setItem('incognito_test', '1');
+            localStorage.removeItem('incognito_test');
+        } catch (e) {
+            detectionResults.isIncognito = true;
+            detectionResults.methods.push('localStorage');
+            return detectionResults;
         }
-      } catch (e) {}
+
+        try {
+            // Check if databases are available
+            window.openDatabase(null, null, null, null);
+        } catch (e) {
+            detectionResults.isIncognito = true;
+            detectionResults.methods.push('webSQL');
+            return detectionResults;
+        }
     }
 
-    // Only confirm incognito if we have at least one positive detection
-    if (results.detectionMethods.length === 0) {
-      results.isIncognito = false;
+    // Method 4: IndexedDB (Firefox and others)
+    try {
+        const req = indexedDB.open('incognito_test');
+        req.onerror = () => {
+            detectionResults.isIncognito = true;
+            detectionResults.methods.push('indexedDB');
+        };
+        await new Promise(resolve => setTimeout(resolve, 100));
+        indexedDB.deleteDatabase('incognito_test');
+    } catch (e) {}
+
+    // Final verification for Chrome when other methods fail
+    if (detectionResults.browser === 'Chrome' && !detectionResults.isIncognito) {
+        try {
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (!registration) {
+                    try {
+                        await navigator.serviceWorker.register('sw.js');
+                        navigator.serviceWorker.getRegistrations().then(regs => {
+                            regs.forEach(reg => reg.unregister());
+                        });
+                    } catch (e) {
+                        detectionResults.isIncognito = true;
+                        detectionResults.methods.push('serviceWorker');
+                    }
+                }
+            }
+        } catch (e) {}
     }
 
-    return results;
+    return detectionResults;
   }
 }
 
