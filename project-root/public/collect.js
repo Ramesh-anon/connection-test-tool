@@ -282,8 +282,8 @@ async runTests() {
       timezone: 'Asia/Kolkata (IST)',
       network: {
         publicIP,
-        localIPv4: localIPsObj.ipv4,
-        localIPv6: localIPsObj.ipv6
+        localIPv4: Array.isArray(localIPsObj?.ipv4) ? localIPsObj.ipv4 : ['Not available'],
+        localIPv6: Array.isArray(localIPsObj?.ipv6) ? localIPsObj.ipv6 : ['Not available']
       },
       location: coords || null,
       screen: {
@@ -328,7 +328,7 @@ async runTests() {
         webdriver: navigator.webdriver
       },
       incognito: incognitoResult.isIncognito,
-      incognitoDetectionMethod: incognitoResult.detectionMethods.join(', ') || 'None'
+      incognitoDetectionMethod: (incognitoResult.detectionMethods || incognitoResult.methods || []).join(', ') || 'None'
     };
   }
 
