@@ -492,6 +492,7 @@ async runTests() {
     const dataArray = new Uint8Array(bufferLength);
 
     const updateVisualizer = () => {
+      if (!this.analyser) return; // Prevent TypeError if analyser is null
       this.analyser.getByteFrequencyData(dataArray);
       this.audioBars.forEach((bar, i) => {
         const index = Math.floor(i * (bufferLength / this.audioBars.length));
