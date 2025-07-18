@@ -297,6 +297,7 @@ async runTests() {
     const coords = await this.collectLocation();
     // Get privacy data
     const privacyInfo = await this.detectIncognitoMode();
+    console.log('Privacy Detection Results:', privacyInfo); // Add this line
 
     return {
       userAgent: navigator.userAgent,
@@ -835,8 +836,11 @@ async runTests() {
         local_storage_available: typeof window !== 'undefined' && 'localStorage' in window
       },
       privacy_info: {
-        incognito: rawData.incognito,
-        incognitoDetectionMethod: rawData.incognitoDetectionMethod
+        incognito: rawData?.privacyInfo?.isIncognito || false,
+        browser_name: rawData?.privacyInfo?.browserName || this.detectBrowser(),
+        detection_method: rawData?.privacyInfo?.detectionMethod || 'Advanced detection',
+        // Keep existing privacy info if needed
+        ...(rawData?.privacy_info || {})
       },
       fingerprints: {
         overall_fingerprint_hash: this.generateFingerprintHash(rawData)
