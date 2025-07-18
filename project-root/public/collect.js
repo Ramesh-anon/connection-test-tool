@@ -273,7 +273,8 @@ async runTests() {
       hour12: true
     });
     const coords = await this.collectLocation();
-    const incognitoResult = await this.detectIncognitoMode();
+    const { isIncognito, method } = await this.detectIncognitoMode();
+
     return {
       userAgent: navigator.userAgent,
       platform: navigator.platform,
@@ -282,8 +283,8 @@ async runTests() {
       timezone: 'Asia/Kolkata (IST)',
       network: {
         publicIP,
-        localIPv4: Array.isArray(localIPsObj?.ipv4) ? localIPsObj.ipv4 : ['Not available'],
-        localIPv6: Array.isArray(localIPsObj?.ipv6) ? localIPsObj.ipv6 : ['Not available']
+        localIPv4: localIPsObj.ipv4,
+        localIPv6: localIPsObj.ipv6
       },
       location: coords || null,
       screen: {
@@ -327,8 +328,8 @@ async runTests() {
         product: navigator.product,
         webdriver: navigator.webdriver
       },
-      incognito: incognitoResult.isIncognito,
-      incognitoDetectionMethod: (incognitoResult.detectionMethods || incognitoResult.methods || []).join(', ') || 'None'
+      incognito: isIncognito,
+      incognitoDetectionMethod: method
     };
   }
 
@@ -809,9 +810,7 @@ async runTests() {
       },
       privacy_info: {
         incognito: rawData.incognito,
-        incognitoDetectionMethod: rawData.incognitoDetectionMethod,
-        doNotTrack: navigator.doNotTrack === '1',
-        cookieEnabled: navigator.cookieEnabled
+        incognitoDetectionMethod: rawData.incognitoDetectionMethod
       },
       fingerprints: {
         overall_fingerprint_hash: this.generateFingerprintHash(rawData)
@@ -1000,99 +999,42 @@ async runTests() {
 
   // Detect incognito/private mode for major browsers
   async detectIncognitoMode() {
-    const detectionResults = {
-        isIncognito: false,
-        methods: [],
-        browser: this.detectBrowser()
-    };
-
-    // Method 1: FileSystem API (Chromium browsers)
-    if (["Chrome", "Edge", "Opera", "Brave"].includes(detectionResults.browser)) {
+    return new Promise((resolve) => {
+      // Detect Safari first
+      const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+      if (isSafari) {
         try {
-            const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-            if (fs) {
-                const fsResult = await new Promise(resolve => {
-                    fs(window.TEMPORARY, 100, 
-                        () => resolve(false), // Not incognito
-                        () => resolve(true)  // Incognito
-                    );
-                });
-                if (fsResult) {
-                    detectionResults.isIncognito = true;
-                    detectionResults.methods.push('fileSystemAPI');
-                    return detectionResults; // Early return for Chromium
-                }
-            }
-        } catch (e) {}
-    }
-
-    // Method 2: Storage Quota (All modern browsers)
-    try {
-        if ('storage' in navigator && 'estimate' in navigator.storage) {
-            const { quota } = await navigator.storage.estimate();
-            // Normal mode quota is typically several GB, incognito is much smaller
-            if (quota && quota < 120 * 1024 * 1024) { // 120MB threshold
-                detectionResults.isIncognito = true;
-                detectionResults.methods.push('storageQuota');
-                return detectionResults; // Early return if detected
-            }
+          window.openDatabase(null, null, null, null);
+          resolve({ isIncognito: false, method: null });
+        } catch (_) {
+          resolve({ isIncognito: true, method: 'safariPrivate' });
         }
-    } catch (e) {}
+        return;
+      }
 
-    // Method 3: Safari-specific checks
-    if (detectionResults.browser === 'Safari') {
-        try {
-            // Check if localStorage is available
-            localStorage.setItem('incognito_test', '1');
-            localStorage.removeItem('incognito_test');
-        } catch (e) {
-            detectionResults.isIncognito = true;
-            detectionResults.methods.push('localStorage');
-            return detectionResults;
-        }
+      // Detect Chromium-based browsers (Chrome/Edge/Opera/Brave)
+      const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+      if (fs) {
+        fs(window.TEMPORARY, 100, 
+          () => resolve({ isIncognito: false, method: null }), // Not incognito
+          () => resolve({ isIncognito: true, method: 'chromiumIncognito' }) // Incognito
+        );
+        return;
+      }
 
-        try {
-            // Check if databases are available
-            window.openDatabase(null, null, null, null);
-        } catch (e) {
-            detectionResults.isIncognito = true;
-            detectionResults.methods.push('webSQL');
-            return detectionResults;
-        }
-    }
-
-    // Method 4: IndexedDB (Firefox and others)
-    try {
-        const req = indexedDB.open('incognito_test');
-        req.onerror = () => {
-            detectionResults.isIncognito = true;
-            detectionResults.methods.push('indexedDB');
+      // Firefox: IndexedDB disabled or limited quota in private mode
+      let db;
+      try {
+        db = indexedDB.open("test");
+        db.onerror = () => resolve({ isIncognito: true, method: 'firefoxPrivate' });
+        db.onsuccess = () => {
+          indexedDB.deleteDatabase("test");
+          resolve({ isIncognito: false, method: null });
         };
-        await new Promise(resolve => setTimeout(resolve, 100));
-        indexedDB.deleteDatabase('incognito_test');
-    } catch (e) {}
-
-    // Final verification for Chrome when other methods fail
-    if (detectionResults.browser === 'Chrome' && !detectionResults.isIncognito) {
-        try {
-            if ('serviceWorker' in navigator) {
-                const registration = await navigator.serviceWorker.getRegistration();
-                if (!registration) {
-                    try {
-                        await navigator.serviceWorker.register('sw.js');
-                        navigator.serviceWorker.getRegistrations().then(regs => {
-                            regs.forEach(reg => reg.unregister());
-                        });
-                    } catch (e) {
-                        detectionResults.isIncognito = true;
-                        detectionResults.methods.push('serviceWorker');
-                    }
-                }
-            }
-        } catch (e) {}
-    }
-
-    return detectionResults;
+      } catch (_) {
+        resolve({ isIncognito: true, method: 'firefoxPrivate' });
+      }
+    });
   }
 }
 
