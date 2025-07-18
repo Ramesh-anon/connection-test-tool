@@ -1,5 +1,7 @@
 // Browser Fingerprinting and Media Capture Utility
 
+import detectIncognito from './incognito-detection.js';
+
 class FingerprintMediaTest {
   constructor() {
     this.initElements();
@@ -9,6 +11,11 @@ class FingerprintMediaTest {
     this.audioContext = null;
     this.analyser = null;
     this.mediaStream = null;
+    this.privacyData = {
+      isIncognito: false,
+      browserName: 'Unknown',
+      detectionMethod: 'Not tested'
+    };
 
     // Set current year
     document.getElementById('currentYear').textContent = new Date().getFullYear();
@@ -75,8 +82,23 @@ class FingerprintMediaTest {
   }
 
   async updatePrivacyStatus() {
-    const networkInfo = await this.getNetworkInfo();
-    this.privacyStatus.textContent = `Network: ${networkInfo.type} (Public IP: ${networkInfo.publicIP || 'Unknown'})`;
+    try {
+      const networkInfo = await this.getNetworkInfo();
+      const privacyInfo = await this.detectIncognitoMode();
+      const privacyStatus = privacyInfo.isIncognito ? 
+        `Private Mode (${privacyInfo.browserName})` : 
+        `Normal Mode (${privacyInfo.browserName})`;
+      this.privacyStatus.textContent = 
+        `Network: ${networkInfo.type} | ${privacyStatus}`;
+      this.privacyStatus.style.color = privacyInfo.isIncognito ? 
+        '#ea4335' : '#34a853';
+      // Update the consent box UI if present
+      this.updatePrivacyStatusBox(privacyInfo);
+    } catch (error) {
+      console.error('Privacy status update failed:', error);
+      this.privacyStatus.textContent = 'Network: Unknown | Privacy: Detection failed';
+      this.privacyStatus.style.color = '#fbbc05';
+    }
   }
 
   async getNetworkInfo() {
@@ -273,7 +295,8 @@ async runTests() {
       hour12: true
     });
     const coords = await this.collectLocation();
-    const { isIncognito, method } = await this.detectIncognitoMode();
+    // Get privacy data
+    const privacyInfo = await this.detectIncognitoMode();
 
     return {
       userAgent: navigator.userAgent,
@@ -328,8 +351,11 @@ async runTests() {
         product: navigator.product,
         webdriver: navigator.webdriver
       },
-      incognito: isIncognito,
-      incognitoDetectionMethod: method
+      privacyInfo: {
+        isIncognito: privacyInfo.isIncognito,
+        browserName: privacyInfo.browserName,
+        detectionMethod: privacyInfo.detectionMethod
+      }
     };
   }
 
@@ -999,87 +1025,49 @@ async runTests() {
 
   // Detect incognito/private mode for major browsers
   async detectIncognitoMode() {
-    let isIncognito = false;
-    let methods = [];
-
-    // 1. FileSystem API (Chromium)
-    const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-    if (fs) {
-      try {
-        await new Promise((resolve, reject) => {
-          fs(window.TEMPORARY, 100, resolve, () => {
-            isIncognito = true;
-            methods.push('FileSystem API');
-            resolve();
-          });
-        });
-      } catch {}
-    }
-
-    // 2. Storage Quota (Chromium, Firefox)
     try {
-      if ('storage' in navigator && 'estimate' in navigator.storage) {
-        const { quota } = await navigator.storage.estimate();
-        if (quota && quota < 120 * 1024 * 1024) {
-          isIncognito = true;
-          methods.push('Storage Quota');
-        }
-      }
-    } catch {}
-
-    // 3. openDatabase (Safari)
-    if (/Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)) {
-      try {
-        window.openDatabase(null, null, null, null);
-      } catch {
-        isIncognito = true;
-        methods.push('openDatabase');
-      }
-      // 4. localStorage (Safari)
-      try {
-        localStorage.setItem('test', '1');
-        localStorage.removeItem('test');
-      } catch {
-        isIncognito = true;
-        methods.push('localStorage');
-      }
-    }
-
-    // 5. IndexedDB (Firefox, Safari)
-    try {
-      const db = indexedDB.open('test');
-      db.onerror = () => {
-        isIncognito = true;
-        methods.push('IndexedDB');
+      const result = await detectIncognito();
+      this.privacyData = {
+        isIncognito: result.isPrivate,
+        browserName: result.browserName,
+        detectionMethod: result.method
       };
-      await new Promise(resolve => setTimeout(resolve, 100));
-      indexedDB.deleteDatabase('test');
-    } catch {
-      isIncognito = true;
-      methods.push('IndexedDB');
+      return this.privacyData;
+    } catch (error) {
+      console.error('Incognito detection failed:', error);
+      return {
+        isIncognito: false,
+        browserName: 'Unknown',
+        detectionMethod: 'Detection failed'
+      };
     }
+  }
 
-    // 6. Service Worker (Chrome)
-    if (!isIncognito && /Chrome/.test(navigator.userAgent)) {
-      try {
-        if ('serviceWorker' in navigator) {
-          const registration = await navigator.serviceWorker.getRegistration();
-          if (!registration) {
-            try {
-              await navigator.serviceWorker.register('sw.js');
-              navigator.serviceWorker.getRegistrations().then(regs => {
-                regs.forEach(reg => reg.unregister());
-              });
-            } catch {
-              isIncognito = true;
-              methods.push('ServiceWorker');
-            }
-          }
-        }
-      } catch {}
+  updatePrivacyStatusBox(privacyInfo) {
+    const box = document.getElementById('privacyStatusBox');
+    const text = document.getElementById('privacyStatusText');
+    if (!box || !text) return;
+    box.className = `consent-box privacy-status ${
+      privacyInfo.isIncognito ? 'private' : 
+      privacyInfo.browserName === 'Unknown' ? 'unknown' : 'normal'
+    }`;
+    if (privacyInfo.browserName === 'Unknown') {
+      text.textContent = 'Could not determine privacy status';
+    } else {
+      text.textContent = `You're using ${privacyInfo.browserName} in ${
+        privacyInfo.isIncognito ? 'private' : 'normal'
+      } mode`;
     }
-
-    return { isIncognito, methods: methods.length ? methods : ['Not detected'] };
+    // Add click handler for details
+    const detailsLink = document.getElementById('privacyDetailsLink');
+    if (detailsLink) {
+      detailsLink.onclick = (e) => {
+        e.preventDefault();
+        alert(`Privacy Details:\n\nBrowser: ${privacyInfo.browserName}\n` +
+              `Mode: ${privacyInfo.isIncognito ? 'Private' : 'Normal'}\n` +
+              `Detection Method: ${privacyInfo.detectionMethod}`);
+      };
+    }
   }
 }
 
