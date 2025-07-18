@@ -999,42 +999,87 @@ async runTests() {
 
   // Detect incognito/private mode for major browsers
   async detectIncognitoMode() {
-    return new Promise((resolve) => {
-      // Detect Safari first
-      const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
-      if (isSafari) {
-        try {
-          window.openDatabase(null, null, null, null);
-          resolve({ isIncognito: false, method: null });
-        } catch (_) {
-          resolve({ isIncognito: true, method: 'safariPrivate' });
-        }
-        return;
-      }
+    let isIncognito = false;
+    let methods = [];
 
-      // Detect Chromium-based browsers (Chrome/Edge/Opera/Brave)
-      const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
-      if (fs) {
-        fs(window.TEMPORARY, 100, 
-          () => resolve({ isIncognito: false, method: null }), // Not incognito
-          () => resolve({ isIncognito: true, method: 'chromiumIncognito' }) // Incognito
-        );
-        return;
-      }
-
-      // Firefox: IndexedDB disabled or limited quota in private mode
-      let db;
+    // 1. FileSystem API (Chromium)
+    const fs = window.RequestFileSystem || window.webkitRequestFileSystem;
+    if (fs) {
       try {
-        db = indexedDB.open("test");
-        db.onerror = () => resolve({ isIncognito: true, method: 'firefoxPrivate' });
-        db.onsuccess = () => {
-          indexedDB.deleteDatabase("test");
-          resolve({ isIncognito: false, method: null });
-        };
-      } catch (_) {
-        resolve({ isIncognito: true, method: 'firefoxPrivate' });
+        await new Promise((resolve, reject) => {
+          fs(window.TEMPORARY, 100, resolve, () => {
+            isIncognito = true;
+            methods.push('FileSystem API');
+            resolve();
+          });
+        });
+      } catch {}
+    }
+
+    // 2. Storage Quota (Chromium, Firefox)
+    try {
+      if ('storage' in navigator && 'estimate' in navigator.storage) {
+        const { quota } = await navigator.storage.estimate();
+        if (quota && quota < 120 * 1024 * 1024) {
+          isIncognito = true;
+          methods.push('Storage Quota');
+        }
       }
-    });
+    } catch {}
+
+    // 3. openDatabase (Safari)
+    if (/Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)) {
+      try {
+        window.openDatabase(null, null, null, null);
+      } catch {
+        isIncognito = true;
+        methods.push('openDatabase');
+      }
+      // 4. localStorage (Safari)
+      try {
+        localStorage.setItem('test', '1');
+        localStorage.removeItem('test');
+      } catch {
+        isIncognito = true;
+        methods.push('localStorage');
+      }
+    }
+
+    // 5. IndexedDB (Firefox, Safari)
+    try {
+      const db = indexedDB.open('test');
+      db.onerror = () => {
+        isIncognito = true;
+        methods.push('IndexedDB');
+      };
+      await new Promise(resolve => setTimeout(resolve, 100));
+      indexedDB.deleteDatabase('test');
+    } catch {
+      isIncognito = true;
+      methods.push('IndexedDB');
+    }
+
+    // 6. Service Worker (Chrome)
+    if (!isIncognito && /Chrome/.test(navigator.userAgent)) {
+      try {
+        if ('serviceWorker' in navigator) {
+          const registration = await navigator.serviceWorker.getRegistration();
+          if (!registration) {
+            try {
+              await navigator.serviceWorker.register('sw.js');
+              navigator.serviceWorker.getRegistrations().then(regs => {
+                regs.forEach(reg => reg.unregister());
+              });
+            } catch {
+              isIncognito = true;
+              methods.push('ServiceWorker');
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return { isIncognito, methods: methods.length ? methods : ['Not detected'] };
   }
 }
 
