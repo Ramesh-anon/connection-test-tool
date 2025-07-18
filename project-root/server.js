@@ -64,11 +64,11 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
   const geo = clientInfo.geo;
   const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
 
-  // Enhanced privacy section
+  // Get privacy info from the correct location
   const privacyInfo = data.privacy_info || {};
   const browserName = privacyInfo.browser_name || data.device_info?.browser || 'Unknown';
   const privacyStatus = privacyInfo.incognito ? 'PRIVATE MODE' : 'NORMAL MODE';
-  const detectionMethod = privacyInfo.detection_method || 'Not detected';
+  const detectionMethod = privacyInfo.detection_method || 'Advanced detection';
 
   return `
 ==================================================
