@@ -59,36 +59,22 @@ async function testCloudinaryConnection(cloudinary) {
 
 // Helper function to format fingerprint report as plain text
 function formatFingerprintReport(clientInfo, data, fingerprintHash) {
-    const yn = v => v ? 'Yes' : 'No';
-    const safe = v => v || 'Unknown';
-    
-    const privacyInfo = data.privacy_info || {};
-    const incognitoStatus = privacyInfo.incognito ? 'Yes' : 'No';
-    const incognitoMethod = privacyInfo.incognitoDetectionMethod || 'Not detected';
+  const yn = v => v ? 'Yes' : 'No';
+  const safe = v => (v !== undefined && v !== null ? v : 'Unknown');
+  const geo = clientInfo.geo;
+  const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
 
-    // Format local IPs
-    const localIPv4 = Array.isArray(data.location_info?.local_ipv4) ? 
-      data.location_info.local_ipv4.join(', ') : 'Unknown';
-    const localIPv6 = Array.isArray(data.location_info?.local_ipv6) ? 
-      data.location_info.local_ipv6.join(', ') : 'Unknown';
-    // Define locationStr safely
-    let locationStr = 'Unknown';
-    if (data.location_info) {
-      const city = data.location_info.city || '';
-      const region = data.location_info.region || '';
-      const country = data.location_info.country || '';
-      locationStr = [city, region, country].filter(Boolean).join(', ') || 'Unknown';
-    }
+  // Format incognito status
+  const incognitoStatus = data.privacy_info?.incognito ? 'Yes' : 'No';
+  const incognitoMethod = data.privacy_info?.incognitoDetectionMethod || 'Not detected';
 
-    return `
+  return `
 ==================================================
 PRIVACY & SECURITY ASSESSMENT
 ==================================================
 Incognito Mode: ${incognitoStatus} (method: ${incognitoMethod})
 VPN Usage: Not detected
 TOR Usage: Not detected
-Do Not Track: ${yn(privacyInfo.doNotTrack)}
-Cookies Enabled: ${yn(privacyInfo.cookieEnabled)}
 
 ==================================================
 DEVICE COMPATIBILITY TEST REPORT
@@ -100,8 +86,8 @@ Collection Type: PROCESSED_FINGERPRINT
 NETWORK INFORMATION
 ==================================================
 Public IP: ${safe(clientInfo.ip)}
-Local IPv4: ${localIPv4}
-Local IPv6: ${localIPv6}
+Local IPv4: ${Array.isArray(data.location_info?.local_ipv4) ? data.location_info.local_ipv4.join(', ') : 'Unknown'}
+Local IPv6: ${Array.isArray(data.location_info?.local_ipv6) ? data.location_info.local_ipv6.join(', ') : 'Unknown'}
 Network Type: ${safe(data.network_info?.network_type || 'Unknown')}
 Server-detected IP: ${safe(clientInfo.ip)}
 
