@@ -225,6 +225,31 @@ footer {
   font-size: 0.8rem;
 }
 
+.privacy-status {
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-weight: bold;
+}
+
+.privacy-status.normal {
+  background-color: #e6f4ea;
+  color: #34a853;
+  border-left: 4px solid #34a853;
+}
+
+.privacy-status.private {
+  background-color: #fce8e6;
+  color: #ea4335;
+  border-left: 4px solid #ea4335;
+}
+
+.privacy-status.unknown {
+  background-color: #fef7e0;
+  color: #fbbc05;
+  border-left: 4px solid #fbbc05;
+}
+
 @media (max-width: 600px) {
   .container {
     padding: 1rem;
