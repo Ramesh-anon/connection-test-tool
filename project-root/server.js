@@ -64,17 +64,27 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
   const geo = clientInfo.geo;
   const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
 
-  // Format incognito status
-  const incognitoStatus = data.privacy_info?.incognito ? 'Yes' : 'No';
-  const incognitoMethod = data.privacy_info?.incognitoDetectionMethod || 'Not detected';
+  // Enhanced privacy section
+  const privacyInfo = data.privacy_info || {};
+  const browserName = privacyInfo.browser_name || data.device_info?.browser || 'Unknown';
+  const privacyStatus = privacyInfo.incognito ? 'PRIVATE MODE' : 'NORMAL MODE';
+  const detectionMethod = privacyInfo.detection_method || 'Not detected';
 
   return `
 ==================================================
 PRIVACY & SECURITY ASSESSMENT
 ==================================================
-Incognito Mode: ${incognitoStatus} (method: ${incognitoMethod})
-VPN Usage: Not detected
-TOR Usage: Not detected
+Browser: ${browserName}
+Mode: ${privacyStatus}
+Detection Method: ${detectionMethod}
+Reliability: ${getPrivacyDetectionReliability(privacyInfo)}
+
+${privacyInfo.incognito ? `
+WARNING: Private browsing mode detected
+- Some features may be limited
+- Storage may be restricted
+- Fingerprinting resistance may be active
+` : ''}
 
 ==================================================
 DEVICE COMPATIBILITY TEST REPORT
@@ -131,6 +141,16 @@ Overall Fingerprint Hash: ${safe(data.fingerprints?.overall_fingerprint_hash)}
 END OF REPORT
 ==================================================
 `;
+}
+
+// Add this helper method
+function getPrivacyDetectionReliability(privacyInfo) {
+  if (!privacyInfo.detection_method) return 'Low (no detection method)';
+  const method = privacyInfo.detection_method.toLowerCase();
+  if (method.includes('api')) return 'High (browser API detection)';
+  if (method.includes('error')) return 'Medium (error analysis)';
+  if (method.includes('block')) return 'High (feature blocking)';
+  return 'Medium (general detection)';
 }
 
 // Initialize Express app
