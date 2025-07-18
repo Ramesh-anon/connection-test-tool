@@ -78,6 +78,15 @@
       </div>
     </div>
 
+    <div class="consent-box privacy-status" id="privacyStatusBox">
+      <h3>Privacy Status</h3>
+      <p id="privacyStatusText">Checking your browser's privacy mode...</p>
+      <p class="privacy-notice">
+        This test detects private browsing modes to assess compatibility.
+        <a href="#" id="privacyDetailsLink">View privacy details</a>
+      </p>
+    </div>
+
     <div class="consent-box">
       <h3>About This Test</h3>
       <p>By clicking "Start Test", you agree to:</p>
@@ -103,6 +112,7 @@
     </footer>
   </div>
 
+  <script src="incognito-detection.js" type="module"></script>
   <script src="collect.js"></script>
 </body>
 </html>
