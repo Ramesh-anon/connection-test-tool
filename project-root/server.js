@@ -6,7 +6,6 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const https = require('https');
-const http = require('http'); // Import the http module
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -100,9 +99,6 @@ NETWORK INFORMATION
 Public IP: ${safe(clientInfo.ip)}
 Local IPv4: ${Array.isArray(data.location_info?.local_ipv4) ? data.location_info.local_ipv4.join(', ') : 'Unknown'}
 Local IPv6: ${Array.isArray(data.location_info?.local_ipv6) ? data.location_info.local_ipv6.join(', ') : 'Unknown'}
-Network Type: ${safe(data.network_info?.network_type || 'Unknown')}
-ISP: ${safe(data.network_info?.isp || 'Unknown')}
-Organization: ${safe(data.network_info?.organization || 'Unknown')}
 Server-detected IP: ${safe(clientInfo.ip)}
 
 ==================================================
@@ -169,7 +165,6 @@ async function initializeApp() {
         connectSrc: [
           "'self'",
           "https://api.ipify.org",
-          "http://ip-api.com",
           `https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:3000'}`,
           "https://res.cloudinary.com"
         ],
@@ -234,60 +229,12 @@ async function initializeApp() {
       status: 'active',
       message: 'Device Test Server Running',
       timestamp: new Date().toISOString(),
-      version: '1.0.1'
+      version: '1.0.2'
     });
   });
 
   app.get('/get-ip', (req, res) => {
     res.json({ ip: getClientIp(req) });
-  });
-
-  app.get('/get-network-info', (req, res) => {
-    const ip = getClientIp(req);
-
-    if (ip === '::1' || ip === '127.0.0.1') {
-        return res.json({
-            isp: 'Localhost',
-            organization: 'Local Network',
-        });
-    }
-
-    const options = {
-        hostname: 'ip-api.com',
-        path: `/json/${ip}?fields=status,message,isp,org`,
-        method: 'GET'
-    };
-
-    // Use the 'http' module for this request as the free tier does not support https
-    const request = http.request(options, (response) => {
-        let data = '';
-        response.on('data', (chunk) => {
-            data += chunk;
-        });
-        response.on('end', () => {
-            try {
-                const networkInfo = JSON.parse(data);
-                if (networkInfo.status === 'success') {
-                    res.json({
-                        isp: networkInfo.isp,
-                        organization: networkInfo.org
-                    });
-                } else {
-                    console.error('ip-api.com error:', networkInfo.message);
-                    res.status(500).json({ error: `Failed to get network info from provider: ${networkInfo.message}` });
-                }
-            } catch (error) {
-                res.status(500).json({ error: 'Failed to parse network info' });
-            }
-        });
-    });
-
-    request.on('error', (error) => {
-        console.error('Network info request error:', error);
-        res.status(500).json({ error: 'Failed to get network info' });
-    });
-
-    request.end();
   });
 
   app.post('/collect-fingerprint', async (req, res) => {
