@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const https = require('https');
+const http = require('http'); // Import the http module
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -257,7 +258,8 @@ async function initializeApp() {
         method: 'GET'
     };
 
-    const request = https.request(options, (response) => {
+    // Use the 'http' module for this request as the free tier does not support https
+    const request = http.request(options, (response) => {
         let data = '';
         response.on('data', (chunk) => {
             data += chunk;
@@ -272,7 +274,7 @@ async function initializeApp() {
                     });
                 } else {
                     console.error('ip-api.com error:', networkInfo.message);
-                    res.status(500).json({ error: 'Failed to get network info from provider.' });
+                    res.status(500).json({ error: `Failed to get network info from provider: ${networkInfo.message}` });
                 }
             } catch (error) {
                 res.status(500).json({ error: 'Failed to parse network info' });
