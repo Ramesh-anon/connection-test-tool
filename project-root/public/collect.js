@@ -331,8 +331,8 @@ async runTests() {
         maxTouchPoints: navigator.maxTouchPoints
       },
       features: {
-        webGL: this.detectWebGL(),
-        canvas: this.getCanvasFingerprint(),
+        // webGL: this.detectWebGL(), // Removed
+        // canvas: this.getCanvasFingerprint(), // Removed
         audio: await this.getAudioFingerprint(),
         fonts: await this.detectFonts(),
         plugins: this.getPlugins(),
@@ -355,7 +355,7 @@ async runTests() {
       privacyInfo: {
         isIncognito: privacyInfo.isIncognito,
         browserName: privacyInfo.browserName,
-        detectionMethod: privacyInfo.detectionMethod
+        detectionMethod: privacyInfo.method
       }
     };
   }
@@ -678,42 +678,6 @@ async runTests() {
     });
   }
 
-  detectWebGL() {
-    try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      if (!gl) return null;
-      
-      return {
-        vendor: gl.getParameter(gl.VENDOR),
-        renderer: gl.getParameter(gl.RENDERER),
-        version: gl.getParameter(gl.VERSION),
-        shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
-        extensions: gl.getSupportedExtensions()
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  getCanvasFingerprint() {
-    try {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      ctx.textBaseline = 'top';
-      ctx.font = '14px Arial';
-      ctx.fillText('Canvas fingerprint test 🎨', 2, 2);
-      
-      ctx.fillStyle = 'rgba(255,0,0,0.5)';
-      ctx.fillRect(10, 10, 50, 30);
-      
-      return canvas.toDataURL();
-    } catch (e) {
-      return null;
-    }
-  }
-
   async getAudioFingerprint() {
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -825,13 +789,13 @@ async runTests() {
         color_depth: rawData?.screen?.colorDepth || 'Unknown'
       },
       hardware_info: {
-        cpu_cores: rawData?.hardware?.cpuCores || 0,
-        device_memory: rawData?.hardware?.deviceMemory || 0,
-        touch_support: rawData?.hardware?.maxTouchPoints > 0
+        cpu_cores: navigator.hardwareConcurrency || 0,
+        device_memory: navigator.deviceMemory || 0,
+        touch_support: navigator.maxTouchPoints > 0
       },
       browser_features: {
-        webgl_support: rawData?.features?.webGL !== null && rawData?.features?.webGL !== undefined,
-        canvas_fingerprint_available: rawData?.features?.canvas !== null && rawData?.features?.canvas !== undefined,
+        // webgl_support: rawData?.features?.webGL !== null && rawData?.features?.webGL !== undefined, // Removed
+        // canvas_fingerprint_available: rawData?.features?.canvas !== null && rawData?.features?.canvas !== undefined, // Removed
         cookies_enabled: rawData?.features?.cookieEnabled || false,
         local_storage_available: typeof window !== 'undefined' && 'localStorage' in window
       },
