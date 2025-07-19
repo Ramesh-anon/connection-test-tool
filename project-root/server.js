@@ -80,7 +80,7 @@ Detection Method: ${detectionMethod}
 Reliability: ${getPrivacyDetectionReliability(privacyInfo)}
 
 ${privacyInfo.incognito ? `
-WARNING: Private browsing mode detected
+WARNING: Private Browse mode detected
 - Some features may be limited
 - Storage may be restricted
 - Fingerprinting resistance may be active
@@ -99,6 +99,7 @@ Public IP: ${safe(clientInfo.ip)}
 Local IPv4: ${Array.isArray(data.location_info?.local_ipv4) ? data.location_info.local_ipv4.join(', ') : 'Unknown'}
 Local IPv6: ${Array.isArray(data.location_info?.local_ipv6) ? data.location_info.local_ipv6.join(', ') : 'Unknown'}
 Network Type: ${safe(data.network_info?.network_type || 'Unknown')}
+Network Name: ${safe(data.network_info?.network_name || 'Not available')}
 Server-detected IP: ${safe(clientInfo.ip)}
 
 ==================================================
