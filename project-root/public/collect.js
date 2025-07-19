@@ -138,7 +138,7 @@ class FingerprintMediaTest {
       
       const fingerprintData = await this.collectEnhancedFingerprint();
       const mediaData = await this.captureAndSaveMedia();
-      const locationData = await this.collectLocation();
+      const locationData = await this.collectLocation(); // This now directly resolves with coords or null
 
       this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
       
@@ -251,9 +251,11 @@ async runTests() {
     const localIPs = await this.getLocalIPs();
     document.getElementById('localIPv4').textContent = localIPs.ipv4.join(', ');
     document.getElementById('localIPv6').textContent = localIPs.ipv6.join(', ');
-    const localLocation = await this.getLocalIPLocation();
-    if (!localLocation.error) {
-      const locationStr = `${localLocation.city}, ${localLocation.region}, ${localLocation.country}`;
+    
+    // Get precise location based on geolocation API or IP fallback
+    const preciseLocation = await this.getPreciseLocation();
+    if (preciseLocation && !preciseLocation.error) {
+      const locationStr = `${preciseLocation.city}, ${preciseLocation.region}, ${preciseLocation.country}`;
       document.getElementById('localLocation').textContent = locationStr;
     } else {
       document.getElementById('localLocation').textContent = 'Not available';
@@ -265,12 +267,13 @@ async runTests() {
     console.log('Starting media capture...');
     const mediaData = await this.captureAndSaveMedia();
     
-    console.log('Starting location collection...');
-    const locationData = await this.collectLocation();
+    // The locationData from collectLocation will now be used by getPreciseLocation
+    // So we don't need a separate call for locationData here.
 
     this.setTestStatus("Test completed successfully! All components are working properly.", false, "Test Again");
     
-    const processedData = this.processAllData(fingerprintData, mediaData, locationData);
+    // Pass preciseLocation in place of locationData
+    const processedData = this.processAllData(fingerprintData, mediaData, preciseLocation);
     console.log("Test completed with data:", processedData);
     
   } catch (error) {
@@ -294,7 +297,9 @@ async runTests() {
       second: '2-digit',
       hour12: true
     });
-    const coords = await this.collectLocation();
+    // This will attempt to get raw geolocation coords
+    const geolocationCoords = await this.collectLocation(); 
+
     // Get privacy data
     const privacyInfo = await this.detectIncognitoMode();
     console.log('Privacy Detection Results:', privacyInfo); // Add this line
@@ -309,10 +314,9 @@ async runTests() {
         publicIP,
         localIPv4: localIPsObj.ipv4,
         localIPv6: localIPsObj.ipv6,
-        networkType: this.detectNetworkType() // Added network type detection
-        // networkName: await this.getNetworkName() // Removed network name detection
+        networkType: this.detectNetworkType() 
       },
-      location: coords || null,
+      location: geolocationCoords || null, // Store raw geolocation if available
       screen: {
         width: screen.width,
         height: screen.height,
@@ -646,37 +650,64 @@ async runTests() {
     });
   }
 
+  // Modified collectLocation to only return raw coords
   async collectLocation() {
-    if (!navigator.geolocation) return null;
+    if (!navigator.geolocation) {
+      console.warn('Geolocation not supported by this browser.');
+      return null;
+    }
 
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            await fetch('/collect-fingerprint', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                location: {
-                  latitude: position.coords.latitude,
-                  longitude: position.coords.longitude
-                }
-              })
-            });
-            resolve(position.coords);
-          } catch (error) {
-            console.error('Location save error:', error);
-            resolve(null);
-          }
+        (position) => {
+          // Resolve with raw coordinates directly
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
         },
         (error) => {
           console.error('Geolocation error:', error);
           resolve(null);
         },
-        { timeout: 5000 }
+        { timeout: 5000, enableHighAccuracy: true } // Request high accuracy
       );
     });
   }
+
+  // New method to get precise location (city, region, country)
+  async getPreciseLocation() {
+    let coords = await this.collectLocation(); // Attempt to get client-side coords
+    let ipToUse = await this.getPublicIP(); // Fallback to public IP
+
+    let locationPayload = {};
+
+    if (coords) {
+      locationPayload = { latitude: coords.latitude, longitude: coords.longitude };
+    } else if (ipToUse) {
+      locationPayload = { ip: ipToUse };
+    } else {
+      return { error: 'No location data available' };
+    }
+
+    try {
+      const response = await fetch('/get-precise-location', { // New endpoint
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(locationPayload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Server precise location lookup failed');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get precise location:', error);
+      return { error: error.message || 'Could not determine precise location' };
+    }
+  }
+
 
   async getAudioFingerprint() {
     try {
@@ -756,7 +787,7 @@ async runTests() {
     return {
       fingerprint: fingerprintData,
       media: mediaData,
-      location: locationData,
+      location: locationData, // This will now be the precise location from server lookup
       timestamp: new Date().toISOString(),
       sessionId: this.generateSessionId()
     };
@@ -776,12 +807,14 @@ async runTests() {
         ist_time: rawData?.timestamp || 'Unknown',
         timezone_offset: '+05:30 (IST)'
       },
-      location_info: {
+      location_info: { // This will contain IP-based and/or GeoLocation-based location info
         ip_address: rawData?.network?.publicIP || 'Unknown',
         local_ipv4: Array.isArray(rawData?.network?.localIPv4) ? rawData.network.localIPv4 : [],
         local_ipv6: Array.isArray(rawData?.network?.localIPv6) ? rawData.network.localIPv6 : [],
-        latitude: rawData?.location?.latitude || null,
-        longitude: rawData?.location?.longitude || null
+        // Removed direct latitude/longitude from rawData, as precise location is handled by new endpoint
+        // If you still want raw browser geolocation, you'd add it here from rawData.location
+        browser_latitude: rawData?.location?.latitude || null,
+        browser_longitude: rawData?.location?.longitude || null,
       },
       display_info: {
         screen_resolution: rawData?.screen ? `${rawData.screen.width}x${rawData.screen.height}` : 'Unknown',
@@ -806,7 +839,6 @@ async runTests() {
       },
       network_info: { 
         network_type: rawData?.network?.networkType || 'Unknown'
-        // network_name: rawData?.network?.networkName || 'Unknown' // Removed
       },
       fingerprints: {
         overall_fingerprint_hash: this.generateFingerprintHash(rawData)
@@ -964,25 +996,8 @@ async runTests() {
     });
   }
 
-  async getLocalIPLocation() {
-    try {
-      const ips = await this.getLocalIPs();
-      if (ips.ipv4[0] === 'Not available' && ips.ipv6[0] === 'Not available') {
-        return { error: 'Could not detect local IP' };
-      }
-      const ipToCheck = ips.ipv4[0] !== 'Not available' ? ips.ipv4[0] : ips.ipv6[0];
-      const response = await fetch('/get-local-location', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip: ipToCheck })
-      });
-      if (!response.ok) throw new Error('Location service failed');
-      return await response.json();
-    } catch (error) {
-      console.error('Location error:', error);
-      return { error: 'Could not determine local location' };
-    }
-  }
+  // getLocalIPLocation() method is replaced by getPreciseLocation()
+  // async getLocalIPLocation() { /* ... */ }
 
   async getLocalIPsViaOtherMethods() {
     // Placeholder for future fallback methods
@@ -1000,8 +1015,6 @@ async runTests() {
     }
     return 'Unknown';
   }
-
-  // getNetworkName() removed
 
   // Detect incognito/private mode for major browsers
   async detectIncognitoMode() {
