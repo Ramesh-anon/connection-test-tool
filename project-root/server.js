@@ -62,7 +62,15 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
   const yn = v => v ? 'Yes' : 'No';
   const safe = v => (v !== undefined && v !== null ? v : 'Unknown');
   const geo = clientInfo.geo;
-  const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
+  
+  // Use data.location if available and precise, otherwise fallback to geoip on clientInfo.ip
+  let reportedLocation = 'Unknown';
+  if (data.location?.city) {
+    reportedLocation = [data.location.city, data.location.region, data.location.country].filter(Boolean).join(', ');
+  } else if (geo) {
+    reportedLocation = [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown';
+  }
+
 
   // Get privacy info from the correct location
   const privacyInfo = data.privacy_info || {};
@@ -114,7 +122,8 @@ Timezone: ${safe(data.timezone_info?.reported_timezone)}
 LOCATION & NETWORK
 ==================================================
 IP Address: ${safe(data.location_info?.ip_address)}
-Location: ${locationStr}
+Location: ${reportedLocation}
+Browser Lat/Long: ${safe(data.location_info?.browser_latitude)}, ${safe(data.location_info?.browser_longitude)}
 Timezone: ${safe(data.timezone_info?.reported_timezone)}
 
 ==================================================
@@ -296,33 +305,64 @@ async function initializeApp() {
     }
   });
 
-  app.post('/get-local-location', async (req, res) => {
+  // New endpoint for precise location lookup
+  app.post('/get-precise-location', async (req, res) => {
     try {
-      const { ip } = req.body;
-      if (!ip) return res.status(400).json({ error: 'IP required' });
+      const { latitude, longitude, ip } = req.body;
+      let geo = null;
 
-      // Option 1: Use a local IP geolocation database
-      const geo = geoip.lookup(ip);
-      // Option 2: Use a paid API service (more accurate)
-      // const apiResponse = await fetch(`https://ipapi.co/${ip}/json/`);
-      // const geo = await apiResponse.json();
+      if (latitude !== undefined && longitude !== undefined) {
+        // Prioritize geolocation coordinates if provided
+        // geoip-lite does not support lat/long lookup directly.
+        // For lat/long to city/region/country conversion, you'd typically use a reverse geocoding API
+        // (e.g., OpenStreetMap Nominatim, Google Geocoding API, etc. - usually requires an API key).
+        // For demonstration, we'll just indicate that lat/long were used and still use IP for geoip-lite if IP is also available.
+        // If you need actual reverse geocoding, you'd integrate an external API here.
+        
+        // For now, let's use the client's IP as a fallback for geoip-lite, even if lat/long are given
+        // This is a simplification. A real-world app might call a reverse geocoding service.
+        const clientIp = getClientIp(req); // Get the IP from the request
+        geo = geoip.lookup(ip || clientIp); // Use the provided IP or the client's IP
+        
+        // Add a note about using provided coordinates if they were sent
+        if (latitude !== undefined && longitude !== undefined) {
+            if (geo) {
+                geo.latitude_from_browser = latitude;
+                geo.longitude_from_browser = longitude;
+            } else {
+                geo = {
+                    latitude_from_browser: latitude,
+                    longitude_from_browser: longitude,
+                    city: 'Unknown (from coords)', region: 'Unknown (from coords)', country: 'Unknown (from coords)'
+                };
+            }
+        }
+
+      } else if (ip) {
+        // Fallback to IP-based lookup if only IP is provided
+        geo = geoip.lookup(ip);
+      } else {
+        return res.status(400).json({ error: 'IP or Lat/Long required for precise location' });
+      }
 
       if (!geo) return res.json({ error: 'Location not found' });
 
       res.json({
-        ip,
         city: geo.city || 'Unknown',
         region: geo.region || 'Unknown',
         country: geo.country || 'Unknown',
-        ll: geo.ll || [0, 0],
+        ll: geo.ll || [0, 0], // Latitude/longitude from geoip if available
         metro: geo.metro || 0,
-        range: geo.range || []
+        range: geo.range || [],
+        browser_latitude: geo.latitude_from_browser || null, // Reflect browser provided lat/long
+        browser_longitude: geo.longitude_from_browser || null
       });
     } catch (error) {
-      console.error('Location error:', error);
-      res.status(500).json({ error: 'Location service failed' });
+      console.error('Precise location error:', error);
+      res.status(500).json({ error: 'Precise location service failed', details: process.env.NODE_ENV === 'development' ? error.message : null });
     }
   });
+
 
   app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
