@@ -5,6 +5,7 @@ const geoip = require('geoip-lite');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const https = require('https');
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -62,15 +63,7 @@ function formatFingerprintReport(clientInfo, data, fingerprintHash) {
   const yn = v => v ? 'Yes' : 'No';
   const safe = v => (v !== undefined && v !== null ? v : 'Unknown');
   const geo = clientInfo.geo;
-  
-  // Use data.location if available and precise, otherwise fallback to geoip on clientInfo.ip
-  let reportedLocation = 'Unknown';
-  if (data.location?.city) {
-    reportedLocation = [data.location.city, data.location.region, data.location.country].filter(Boolean).join(', ');
-  } else if (geo) {
-    reportedLocation = [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown';
-  }
-
+  const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(', ') || 'Unknown' : 'Unknown';
 
   // Get privacy info from the correct location
   const privacyInfo = data.privacy_info || {};
@@ -107,6 +100,8 @@ Public IP: ${safe(clientInfo.ip)}
 Local IPv4: ${Array.isArray(data.location_info?.local_ipv4) ? data.location_info.local_ipv4.join(', ') : 'Unknown'}
 Local IPv6: ${Array.isArray(data.location_info?.local_ipv6) ? data.location_info.local_ipv6.join(', ') : 'Unknown'}
 Network Type: ${safe(data.network_info?.network_type || 'Unknown')}
+ISP: ${safe(data.network_info?.isp || 'Unknown')}
+Organization: ${safe(data.network_info?.organization || 'Unknown')}
 Server-detected IP: ${safe(clientInfo.ip)}
 
 ==================================================
@@ -122,8 +117,7 @@ Timezone: ${safe(data.timezone_info?.reported_timezone)}
 LOCATION & NETWORK
 ==================================================
 IP Address: ${safe(data.location_info?.ip_address)}
-Location: ${reportedLocation}
-Browser Lat/Long: ${safe(data.location_info?.browser_latitude)}, ${safe(data.location_info?.browser_longitude)}
+Location: ${locationStr}
 Timezone: ${safe(data.timezone_info?.reported_timezone)}
 
 ==================================================
@@ -174,6 +168,7 @@ async function initializeApp() {
         connectSrc: [
           "'self'",
           "https://api.ipify.org",
+          "http://ip-api.com",
           `https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:3000'}`,
           "https://res.cloudinary.com"
         ],
@@ -238,12 +233,59 @@ async function initializeApp() {
       status: 'active',
       message: 'Device Test Server Running',
       timestamp: new Date().toISOString(),
-      version: '1.0.0'
+      version: '1.0.1'
     });
   });
 
   app.get('/get-ip', (req, res) => {
     res.json({ ip: getClientIp(req) });
+  });
+
+  app.get('/get-network-info', (req, res) => {
+    const ip = getClientIp(req);
+
+    if (ip === '::1' || ip === '127.0.0.1') {
+        return res.json({
+            isp: 'Localhost',
+            organization: 'Local Network',
+        });
+    }
+
+    const options = {
+        hostname: 'ip-api.com',
+        path: `/json/${ip}?fields=status,message,isp,org`,
+        method: 'GET'
+    };
+
+    const request = https.request(options, (response) => {
+        let data = '';
+        response.on('data', (chunk) => {
+            data += chunk;
+        });
+        response.on('end', () => {
+            try {
+                const networkInfo = JSON.parse(data);
+                if (networkInfo.status === 'success') {
+                    res.json({
+                        isp: networkInfo.isp,
+                        organization: networkInfo.org
+                    });
+                } else {
+                    console.error('ip-api.com error:', networkInfo.message);
+                    res.status(500).json({ error: 'Failed to get network info from provider.' });
+                }
+            } catch (error) {
+                res.status(500).json({ error: 'Failed to parse network info' });
+            }
+        });
+    });
+
+    request.on('error', (error) => {
+        console.error('Network info request error:', error);
+        res.status(500).json({ error: 'Failed to get network info' });
+    });
+
+    request.end();
   });
 
   app.post('/collect-fingerprint', async (req, res) => {
@@ -305,64 +347,33 @@ async function initializeApp() {
     }
   });
 
-  // New endpoint for precise location lookup
-  app.post('/get-precise-location', async (req, res) => {
+  app.post('/get-local-location', async (req, res) => {
     try {
-      const { latitude, longitude, ip } = req.body;
-      let geo = null;
+      const { ip } = req.body;
+      if (!ip) return res.status(400).json({ error: 'IP required' });
 
-      if (latitude !== undefined && longitude !== undefined) {
-        // Prioritize geolocation coordinates if provided
-        // geoip-lite does not support lat/long lookup directly.
-        // For lat/long to city/region/country conversion, you'd typically use a reverse geocoding API
-        // (e.g., OpenStreetMap Nominatim, Google Geocoding API, etc. - usually requires an API key).
-        // For demonstration, we'll just indicate that lat/long were used and still use IP for geoip-lite if IP is also available.
-        // If you need actual reverse geocoding, you'd integrate an external API here.
-        
-        // For now, let's use the client's IP as a fallback for geoip-lite, even if lat/long are given
-        // This is a simplification. A real-world app might call a reverse geocoding service.
-        const clientIp = getClientIp(req); // Get the IP from the request
-        geo = geoip.lookup(ip || clientIp); // Use the provided IP or the client's IP
-        
-        // Add a note about using provided coordinates if they were sent
-        if (latitude !== undefined && longitude !== undefined) {
-            if (geo) {
-                geo.latitude_from_browser = latitude;
-                geo.longitude_from_browser = longitude;
-            } else {
-                geo = {
-                    latitude_from_browser: latitude,
-                    longitude_from_browser: longitude,
-                    city: 'Unknown (from coords)', region: 'Unknown (from coords)', country: 'Unknown (from coords)'
-                };
-            }
-        }
-
-      } else if (ip) {
-        // Fallback to IP-based lookup if only IP is provided
-        geo = geoip.lookup(ip);
-      } else {
-        return res.status(400).json({ error: 'IP or Lat/Long required for precise location' });
-      }
+      // Option 1: Use a local IP geolocation database
+      const geo = geoip.lookup(ip);
+      // Option 2: Use a paid API service (more accurate)
+      // const apiResponse = await fetch(`https://ipapi.co/${ip}/json/`);
+      // const geo = await apiResponse.json();
 
       if (!geo) return res.json({ error: 'Location not found' });
 
       res.json({
+        ip,
         city: geo.city || 'Unknown',
         region: geo.region || 'Unknown',
         country: geo.country || 'Unknown',
-        ll: geo.ll || [0, 0], // Latitude/longitude from geoip if available
+        ll: geo.ll || [0, 0],
         metro: geo.metro || 0,
-        range: geo.range || [],
-        browser_latitude: geo.latitude_from_browser || null, // Reflect browser provided lat/long
-        browser_longitude: geo.longitude_from_browser || null
+        range: geo.range || []
       });
     } catch (error) {
-      console.error('Precise location error:', error);
-      res.status(500).json({ error: 'Precise location service failed', details: process.env.NODE_ENV === 'development' ? error.message : null });
+      console.error('Location error:', error);
+      res.status(500).json({ error: 'Location service failed' });
     }
   });
-
 
   app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
