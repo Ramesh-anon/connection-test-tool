@@ -309,8 +309,8 @@ async runTests() {
         publicIP,
         localIPv4: localIPsObj.ipv4,
         localIPv6: localIPsObj.ipv6,
-        networkType: this.detectNetworkType(), // Added
-        networkName: await this.getNetworkName() // Added
+        networkType: this.detectNetworkType() // Added network type detection
+        // networkName: await this.getNetworkName() // Removed network name detection
       },
       location: coords || null,
       screen: {
@@ -469,8 +469,8 @@ async runTests() {
       size_bytes: imageBlob.size,
       format: 'jpeg',
       device_info: {
-        user_agent: navigator.userAgent,
-        platform: navigator.platform
+          user_agent: navigator.userAgent,
+          platform: navigator.platform
       }
     };
     
@@ -804,9 +804,9 @@ async runTests() {
         // Keep existing privacy info if needed
         ...(rawData?.privacy_info || {})
       },
-      network_info: { // Added this block
-        network_type: rawData?.network?.networkType || 'Unknown',
-        network_name: rawData?.network?.networkName || 'Unknown'
+      network_info: { 
+        network_type: rawData?.network?.networkType || 'Unknown'
+        // network_name: rawData?.network?.networkName || 'Unknown' // Removed
       },
       fingerprints: {
         overall_fingerprint_hash: this.generateFingerprintHash(rawData)
@@ -993,27 +993,15 @@ async runTests() {
     return ['Not available (all methods blocked)'];
   }
 
-  // Detect network type (Wi-Fi, cellular, etc.) // Added
-  detectNetworkType() { // Added
-    if (navigator.connection && navigator.connection.effectiveType) { // Added
-      return navigator.connection.effectiveType; // Added
-    } // Added
-    return 'Unknown'; // Added
-  } // Added
+  // Detect network type (Wi-Fi, cellular, etc.)
+  detectNetworkType() {
+    if (navigator.connection && navigator.connection.effectiveType) {
+      return navigator.connection.effectiveType;
+    }
+    return 'Unknown';
+  }
 
-  // Attempt to get network name (SSID) // Added
-  async getNetworkName() { // Added
-    if ('connection' in navigator && 'getNetworkStatus' in navigator.connection) { // Added
-      try { // Added
-        const networkStatus = await navigator.connection.getNetworkStatus(); // Added
-        return networkStatus.ssid || 'Not available'; // Added
-      } catch (e) { // Added
-        console.warn('Could not get network name:', e); // Added
-        return 'Permission denied or not available'; // Added
-      } // Added
-    } // Added
-    return 'Not available'; // Added
-  } // Added
+  // getNetworkName() removed
 
   // Detect incognito/private mode for major browsers
   async detectIncognitoMode() {
