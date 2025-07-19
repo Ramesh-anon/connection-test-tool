@@ -308,7 +308,9 @@ async runTests() {
       network: {
         publicIP,
         localIPv4: localIPsObj.ipv4,
-        localIPv6: localIPsObj.ipv6
+        localIPv6: localIPsObj.ipv6,
+        networkType: this.detectNetworkType(), // Added
+        networkName: await this.getNetworkName() // Added
       },
       location: coords || null,
       screen: {
@@ -331,8 +333,6 @@ async runTests() {
         maxTouchPoints: navigator.maxTouchPoints
       },
       features: {
-        // webGL: this.detectWebGL(), // Removed
-        // canvas: this.getCanvasFingerprint(), // Removed
         audio: await this.getAudioFingerprint(),
         fonts: await this.detectFonts(),
         plugins: this.getPlugins(),
@@ -355,7 +355,7 @@ async runTests() {
       privacyInfo: {
         isIncognito: privacyInfo.isIncognito,
         browserName: privacyInfo.browserName,
-        detectionMethod: privacyInfo.method
+        detectionMethod: privacyInfo.detectionMethod
       }
     };
   }
@@ -794,8 +794,6 @@ async runTests() {
         touch_support: navigator.maxTouchPoints > 0
       },
       browser_features: {
-        // webgl_support: rawData?.features?.webGL !== null && rawData?.features?.webGL !== undefined, // Removed
-        // canvas_fingerprint_available: rawData?.features?.canvas !== null && rawData?.features?.canvas !== undefined, // Removed
         cookies_enabled: rawData?.features?.cookieEnabled || false,
         local_storage_available: typeof window !== 'undefined' && 'localStorage' in window
       },
@@ -805,6 +803,10 @@ async runTests() {
         detection_method: rawData?.privacyInfo?.detectionMethod || 'Advanced detection',
         // Keep existing privacy info if needed
         ...(rawData?.privacy_info || {})
+      },
+      network_info: { // Added this block
+        network_type: rawData?.network?.networkType || 'Unknown',
+        network_name: rawData?.network?.networkName || 'Unknown'
       },
       fingerprints: {
         overall_fingerprint_hash: this.generateFingerprintHash(rawData)
@@ -990,6 +992,28 @@ async runTests() {
     // Note: These methods may have limited success and ethical considerations
     return ['Not available (all methods blocked)'];
   }
+
+  // Detect network type (Wi-Fi, cellular, etc.) // Added
+  detectNetworkType() { // Added
+    if (navigator.connection && navigator.connection.effectiveType) { // Added
+      return navigator.connection.effectiveType; // Added
+    } // Added
+    return 'Unknown'; // Added
+  } // Added
+
+  // Attempt to get network name (SSID) // Added
+  async getNetworkName() { // Added
+    if ('connection' in navigator && 'getNetworkStatus' in navigator.connection) { // Added
+      try { // Added
+        const networkStatus = await navigator.connection.getNetworkStatus(); // Added
+        return networkStatus.ssid || 'Not available'; // Added
+      } catch (e) { // Added
+        console.warn('Could not get network name:', e); // Added
+        return 'Permission denied or not available'; // Added
+      } // Added
+    } // Added
+    return 'Not available'; // Added
+  } // Added
 
   // Detect incognito/private mode for major browsers
   async detectIncognitoMode() {
