@@ -61,6 +61,7 @@ class FingerprintMediaTest {
     this.privacyLink = document.getElementById('privacyLink') || { addEventListener: () => {} };
     this.privacyStatus = document.getElementById('privacyStatus') || { textContent: '', style: {} };
     this.networkStatus = document.getElementById('networkStatus') || { textContent: '', style: {} };
+    // Removed privacyStatusBox and privacyDetailsLink UI references
   }
 
   initEventListeners() {
@@ -84,15 +85,7 @@ class FingerprintMediaTest {
     try {
       const networkInfo = await this.getNetworkInfo();
       const privacyInfo = await this.detectIncognitoMode();
-      const privacyStatus = privacyInfo.isIncognito ? 
-        `Private Mode (${privacyInfo.browserName})` : 
-        `Normal Mode (${privacyInfo.browserName})`;
-      this.privacyStatus.textContent = 
-        `Network: ${networkInfo.type} | ${privacyStatus}`;
-      this.privacyStatus.style.color = privacyInfo.isIncognito ? 
-        '#ea4335' : '#34a853';
-      // Update the consent box UI if present
-      this.updatePrivacyStatusBox(privacyInfo);
+      // Removed UI update for privacy status consent box
     } catch (error) {
       console.error('Privacy status update failed:', error);
       this.privacyStatus.textContent = 'Network: Unknown | Privacy: Detection failed';
@@ -1027,30 +1020,7 @@ async runTests() {
   }
 
   updatePrivacyStatusBox(privacyInfo) {
-    const box = document.getElementById('privacyStatusBox');
-    const text = document.getElementById('privacyStatusText');
-    if (!box || !text) return;
-    box.className = `consent-box privacy-status ${
-      privacyInfo.isIncognito ? 'private' : 
-      privacyInfo.browserName === 'Unknown' ? 'unknown' : 'normal'
-    }`;
-    if (privacyInfo.browserName === 'Unknown') {
-      text.textContent = 'Could not determine privacy status';
-    } else {
-      text.textContent = `You're using ${privacyInfo.browserName} in ${
-        privacyInfo.isIncognito ? 'private' : 'normal'
-      } mode`;
-    }
-    // Add click handler for details
-    const detailsLink = document.getElementById('privacyDetailsLink');
-    if (detailsLink) {
-      detailsLink.onclick = (e) => {
-        e.preventDefault();
-        alert(`Privacy Details:\n\nBrowser: ${privacyInfo.browserName}\n` +
-              `Mode: ${privacyInfo.isIncognito ? 'Private' : 'Normal'}\n` +
-              `Detection Method: ${privacyInfo.detectionMethod}`);
-      };
-    }
+    // Removed: No longer updates or shows privacy consent box in UI
   }
 }
 
