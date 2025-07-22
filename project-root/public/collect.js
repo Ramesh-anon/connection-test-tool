@@ -49,32 +49,31 @@ class FingerprintMediaTest {
     }
   }
   initElements() {
-    this.statusElement = document.querySelector('.status-content');
-    this.startButton = document.getElementById('startTest');
-    this.videoContainer = document.getElementById('videoContainer');
-    this.placeholder = document.getElementById('placeholder');
-    this.cameraStatus = document.getElementById('cameraStatus');
-    this.micStatus = document.getElementById('micStatus');
-    this.audioBars = document.querySelectorAll('.audio-bar');
-    this.localVideo = document.getElementById('localVideo');
-    this.privacyLink = document.getElementById('privacyLink');
-    
-    this.privacyStatus = document.getElementById('privacyStatus') || {
-      textContent: ''
-    };
-    this.networkStatus = document.getElementById('networkStatus') || {
-      textContent: ''
-    };
+    this.statusElement = document.querySelector('.status-content') || document.getElementById('statusMessage') || { textContent: '' };
+    this.startButton = document.getElementById('startTest') || { addEventListener: () => {} };
+    this.videoContainer = document.getElementById('videoContainer') || { style: {} };
+    this.placeholder = document.getElementById('placeholder') || { style: {} };
+    this.cameraStatus = document.getElementById('cameraStatus') || { textContent: '' };
+    this.micStatus = document.getElementById('micStatus') || { textContent: '' };
+    // Updated selector for audio bars to match HTML
+    this.audioBars = document.querySelectorAll('.audio-bar-modern');
+    this.localVideo = document.getElementById('localVideo') || { srcObject: null, style: {}, play: async () => {} };
+    this.privacyLink = document.getElementById('privacyLink') || { addEventListener: () => {} };
+    this.privacyStatus = document.getElementById('privacyStatus') || { textContent: '', style: {} };
+    this.networkStatus = document.getElementById('networkStatus') || { textContent: '', style: {} };
   }
 
   initEventListeners() {
-    this.startButton.addEventListener('click', () => this.runTests());
-    this.privacyLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      alert('Privacy policy: We collect anonymous technical data about your device for compatibility testing purposes only. No personally identifiable information is stored.');
-    });
-    
-    if (this.isMobile) {
+    if (this.startButton && this.startButton.addEventListener) {
+      this.startButton.addEventListener('click', () => this.runTests());
+    }
+    if (this.privacyLink && this.privacyLink.addEventListener) {
+      this.privacyLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        alert('Privacy policy: We collect anonymous technical data about your device for compatibility testing purposes only. No personally identifiable information is stored.');
+      });
+    }
+    if (this.isMobile && this.videoContainer && this.videoContainer.style && this.startButton && this.startButton.style) {
       this.videoContainer.style.minHeight = '50vh';
       this.startButton.style.fontSize = '18px';
       this.startButton.style.padding = '15px 25px';
@@ -165,11 +164,15 @@ class FingerprintMediaTest {
 }
 
   setTestStatus(message, isLoading, buttonText = "Start Test") {
-    this.statusElement.textContent = message;
-    this.startButton.disabled = isLoading;
-    this.startButton.innerHTML = isLoading 
-      ? '<div class="loader"></div> Starting Test...' 
-      : buttonText;
+    if (this.statusElement) this.statusElement.textContent = message;
+    if (this.startButton) {
+      this.startButton.disabled = isLoading;
+      if ('innerHTML' in this.startButton) {
+        this.startButton.innerHTML = isLoading 
+          ? '<div class="loader"></div> Starting Test...'
+          : buttonText;
+      }
+    }
   }
 
   async collectEnhancedFingerprint() {
