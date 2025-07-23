@@ -182,7 +182,7 @@ class FingerprintMediaTest {
     });
 
     // Show loading state
-    this.setTestStatus("Uploading fingerprint data...", true);
+    // this.setTestStatus("Uploading fingerprint data...", true); // Removed as per request
 
     const response = await fetch('/collect-fingerprint', {
       method: 'POST',
@@ -243,7 +243,7 @@ async runTests() {
     this.networkStatus.textContent = `Network: Detected (Public IP: ${publicIP || 'Not available'})`;
     
     // Get local network info
-    this.setTestStatus("Checking local network...", true);
+    // this.setTestStatus("Checking local network...", true); // Removed as per request
     const localIPs = await this.getLocalIPs();
     document.getElementById('localIPv4').textContent = localIPs.ipv4.join(', ');
     document.getElementById('localIPv6').textContent = localIPs.ipv6.join(', ');
